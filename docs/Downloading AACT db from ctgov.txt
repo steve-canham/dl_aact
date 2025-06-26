@@ -6,29 +6,39 @@ Restoring the full AACT database
 1) Download the zip file with the most recent AACT datadump - usually provided on a daily basis
 2) Unzip the file and store the postgres.dmp file in a suitable folder
 3) Create the 'aact' DB if not already created
-4) Open a command window and navigate to the Postgres bin folder - on a Windows machine this is C:\program files\postgresql\17\bin
-(This is where pg_restore.exe is to be found. Alternatively ensure the location is added to the Path variable)
-5) Ensure access to the DB is available by setting up a pgpass text file, if one is not already present. 
-This contains the user credentials and removes the need to include the password in the restore command.  (see https://www.postgresql.org/docs/current/libpq-pgpass.html)
-For a Windows machine: This file must be called pgpass.conf and should be in the AppData\Roaming\PostgreSQL folder of the current server user, i.e. normally 'admin' 
-on a server, not the postgres user, (which is usually 'postgres'). 
-On a Linux machine: states the file is .pgpass and should be in the user's home directory and subject to security restrictions (not tested) - see PG documentation link above.
-The file has a host:port:database:user:password pattern, but include a * wildcard as the database name.
-e.g.
+4) Ensure access to the DB is available by setting up a pgpass text file, if one is not already present. 
+This contains the user credentials and removes the need to include the password in the restore command.  (see https://www.postgresql.org/docs/current/libpq-pgpass.html).
+The file has lines with a host:port:database:user:password pattern, but include a * wildcard as the database name, e.g. 
 # host:port:database:user:password
-localhost:5433:*:<user name>:<password>
+localhost:5432:*:<user name>:<password>
+4a) On a Linux machine: the file is called .pgpass and should be in the user's home directory and subject to security restrictions (0600) - see PG documentation link above.
+4b) On a Windows machine: This file must be called pgpass.conf and should be in the AppData\Roaming\PostgreSQL folder of the current server user, i.e. normally 'admin' 
+on a server, not the postgres user, (which is usually 'postgres'). 
+5a) On a Linux machine Postgress installation should normally have inserted pg_restore in a folder listed within the PATH (e.g. /usr/bin, but actual location may 
+vary between distros). Check this is the case (modify PATH is necessary), and open a console window.
+5b) On a Windows machine folder may be in the path but if not open a command window and navigate to the Postgres bin folder - this is C:\program files\postgresql\17\bin.
 
-6) Run the following command:
+On initial download of the aact file...
+6a) On a Linux machine ensure that the current user can access both the database and the downloaded postgres.dmp file. One way is to modify the postgres.hba_conf file to allow all local users to 
+access the PG server cluster, e.g. as trusted users. As the default PG authentication scheme appears to be 'peer' for local users, an easier approach is to create a PG super user with the same name
+as the OS admin user (i.e. the account established at OS install). The best approach may vary depending on previous changes to the postgres.hba_conf file.
+Assuming an OS sudo name and PG superuser name of 'fred' run
 
-*** first time use
+pg_restore -e -v -O -x -d aact --no-owner -U fred '/home/steve/Data/MDR source data/CTGDumps/20250318/postgres.dmp'
 
- pg_restore -h localhost -U postgres -p 5433 -e -v -O -x -d aact --no-owner "E:\MDR source data\CTG Dumps\20250318\postgres.dmp"
+where the path to the postgres.dmp file needs to match the actual path.
+
+6b) On a Windows machine run the following command:
+
+pg_restore -h localhost -U postgres -e -v -O -x -d aact --no-owner "E:\MDR source data\CTG Dumps\20250318\postgres.dmp"
  
- where 
+where the path to the postgres.dmp file needs to match the actual path, and the pgpass file provides the password.
+
+In both cases
  -h: Specifies the host name of the machine on which the server is running. The default is taken from the PGHOST environment variable, if set.
  -U: User name to connect as.
  -p: Specifies the TCP port or local Unix domain socket file extension on which the server is listening for connections. 
-	Defaults to the PGPORT environment variable, if set, or a compiled-in default.
+	Defaults to the PGPORT environment variable, if set, or a compiled-in default. If the port is the default 5432, therefore, it need not be included in the command.
  -e: Exit if an error is encountered while sending SQL commands to the database. The default is to continue and to display a count of errors at the end of the restoration.
  -v: Specifies verbose mode. This will cause pg_restore to output detailed object comments and start/stop times to the output file, and progress messages to standard error. 
  -O: =  --no-owner. Do not output commands to set ownership of objects to match the original database. 
@@ -42,6 +52,8 @@ localhost:5433:*:<user name>:<password>
  
  
   *** subsequent use, replace existing database
+
+Despite using 
   
 Despite the 'clean' flag in the command below, any existing ctgov schema in the aact db must first be deleted., or the command below exits with an error about the schema already existing.
   

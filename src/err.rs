@@ -1,4 +1,4 @@
-use crate::setup::log_set_up;
+use crate::setup::log_running;
 use thiserror::Error;
 use log::error;
 
@@ -114,7 +114,7 @@ fn output_error (err_output: String) {
 
     eprint!("{}", err_output);
 
-    if log_set_up(){
+    if log_running(){
         error!("{}", err_output);
     }
 }

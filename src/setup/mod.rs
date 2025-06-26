@@ -11,9 +11,10 @@ use std::time::Duration;
 use sqlx::ConnectOptions;
 use config_reader::Config;
 use std::sync::OnceLock;
+use chrono::NaiveDate;
 
 pub struct InitParams {
-    pub data_folder: PathBuf,
+    pub data_date: String,
     pub log_folder: PathBuf,
     pub flags: Flags,
 }
@@ -29,35 +30,37 @@ pub fn get_params(cli_pars: CliPars, config_string: &String) -> Result<InitParam
     // If folder name also given in CL args the CL version takes precedence
     
     let config_file: Config = config_reader::populate_config_vars(&config_string)?; 
-    let folder_pars = config_file.folders;  // guaranteed to exist
 
-    let empty_pb = PathBuf::from("");
-    let mut data_folder_good = true;
+    //let data_date = config_file.data_details.data_date;  
 
-    let data_folder =  folder_pars.data_folder_path;
-    if !folder_exists (&data_folder) 
-    {   
-        data_folder_good = false;
+    // If data date given in CL args the CL version takes precedence, 
+    // else use the config file. Whatever the source Data date must also 
+    // be a valid date. If not end the program with error message.
+
+    let mut data_date = cli_pars.data_date;
+    if data_date == "".to_string() {
+        data_date =  config_file.data_details.data_date;  
     }
 
-    if !data_folder_good && cli_pars.flags.import_data { 
-        return Result::Err(AppError::MissingProgramParameter("data_folder".to_string()));
+    data_date = match NaiveDate::parse_from_str(&data_date, "%Y-%m-%d") {
+        Ok(_) => data_date,
+        Err(_) => "".to_string(),
+    };
+
+    if data_date == "" {   // Raise an AppError...required data is missing.
+        return Result::Err(AppError::MissingProgramParameter("data_date".to_string()));
     }
 
-    let mut log_folder = folder_pars.log_folder_path;
-    if log_folder == empty_pb && data_folder_good {
-        log_folder = data_folder.clone();
-    }
-    else {
-        if !folder_exists (&log_folder) { 
-            fs::create_dir_all(&log_folder)?;
-        }
+
+    let log_folder = config_file.folders.log_folder_path;  
+    if !folder_exists (&log_folder) { 
+        fs::create_dir_all(&log_folder)?;
     }
    
     // For execution flags read from the environment variables
     
     Ok(InitParams {
-        data_folder,
+        data_date,
         log_folder,
         flags: cli_pars.flags,
     })
@@ -105,7 +108,7 @@ pub async fn get_db_pool() -> Result<PgPool, AppError> {
 
 pub fn establish_log(params: &InitParams) -> Result<(), AppError> {
 
-    if !log_set_up() {  // can be called more than once in context of integration tests
+    if !log_running() {  // can be called more than once in context of integration tests
         log_helper::setup_log(&params.log_folder)?;
         LOG_RUNNING.set(true).unwrap(); // should always work
         log_helper::log_startup_params(&params);
@@ -113,7 +116,7 @@ pub fn establish_log(params: &InitParams) -> Result<(), AppError> {
     Ok(())
 }
 
-pub fn log_set_up() -> bool {
+pub fn log_running() -> bool {
     match LOG_RUNNING.get() {
         Some(_) => true,
         None => false,
@@ -129,19 +132,25 @@ mod tests {
     use std::ffi::OsString;
 
     #[test]
-    fn check_config_vars_read_correctly() {
+    fn check_config_with_no_params_read_correctly() {
 
         let config = r#"
-[folders]
-data_folder_path="E:\\MDR source data\\Geonames\\data"
-log_folder_path="E:\\MDR source data\\Geonames\\logs"
-output_folder_path="E:\\MDR source data\\Geonames\\outputs"
+ [data]
+ data_date="2025-06-25"
 
-[database]
-db_host="localhost"
-db_user="user_name"
-db_password="password"
-db_port="5433"
+ [folders]
+ log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ 
+ [database]
+ db_host="localhost"
+ db_user="user_name"
+ db_password="password"
+ db_port="5432"
+ db_name="aact"
+ who_db_name="who"
+ cxt_db_name="cxt"
+ cgt_db_name="cgt"
+
 "#;
         let config_string = config.to_string();
         config_reader::populate_config_vars(&config_string).unwrap();
@@ -152,38 +161,181 @@ db_port="5433"
 
         let res = get_params(cli_pars, &config_string).unwrap();
 
-        assert_eq!(res.flags.import_data, true);
+        assert_eq!(res.data_date, "2025-06-25");
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.flags.process_mdr_data, true);
+        assert_eq!(res.flags.process_iec_data, false);
+        assert_eq!(res.flags.code_data, false);
+        assert_eq!(res.flags.transfer_to_who, false);
+        assert_eq!(res.flags.overwrite_ctg, false);   
         assert_eq!(res.flags.test_run, false);
-        assert_eq!(res.data_folder, PathBuf::from("E:\\MDR source data\\Geonames\\data"));
-        assert_eq!(res.log_folder, PathBuf::from("E:\\MDR source data\\Geonames\\logs"));
+        assert_eq!(res.flags.process_mdr_data, true);
+        assert_eq!(res.flags.test_run, false);
 
     }
    
-    
+
+    #[test]
+    fn check_cli_date_overrides_config_date() {
+
+         let config = r#"
+ [data]
+ data_date="2025-06-25"
+
+ [folders]
+ log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ 
+ [database]
+ db_host="localhost"
+ db_user="user_name"
+ db_password="password"
+ db_port="5432"
+ db_name="aact"
+ who_db_name="who"
+ cxt_db_name="cxt"
+ cgt_db_name="cgt"
+
+ "#;
+ let config_string = config.to_string();
+        config_reader::populate_config_vars(&config_string).unwrap();
+
+        let args : Vec<&str> = vec!["dummy target", "-d", "2025-03-03"];
+        let test_args = args.iter().map(|x| x.to_string().into()).collect::<Vec<OsString>>();
+        let cli_pars = cli_reader::fetch_valid_arguments(test_args).unwrap();
+
+        let res = get_params(cli_pars, &config_string).unwrap();
+
+        assert_eq!(res.data_date, "2025-03-03");
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.flags.process_mdr_data, true);
+        assert_eq!(res.flags.process_iec_data, false);
+
+
+    }
+
+
     #[test]
     #[should_panic]
-    fn check_wrong_data_folder_panics() {
+    fn check_no_date_panics() {
 
-        let config = r#"
-[folders]
-data_folder_path="C:\\MDR source data\\Geonames\\data"
-log_folder_path="E:\\MDR source data\\Geonames\\logs"
-output_folder_path="E:\\MDR source data\\Geonames\\outputs"
+         let config = r#"
+ [data]
+ data_date=""
 
-[database]
-db_host="localhost"
-db_user="user_name"
-db_password="password"
-db_port="5433"
-"#;
+ [folders]
+ log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ 
+ [database]
+ db_host="localhost"
+ db_user="user_name"
+ db_password="password"
+ db_port="5432"
+ db_name="aact"
+ who_db_name="who"
+ cxt_db_name="cxt"
+ cgt_db_name="cgt"
+
+ "#;
         let config_string = config.to_string();
         config_reader::populate_config_vars(&config_string).unwrap();
-        
-        let args : Vec<&str> = vec!["dummy target", "-r"];
+
+        let args : Vec<&str> = vec!["dummy target", "-m", "-e"];
         let test_args = args.iter().map(|x| x.to_string().into()).collect::<Vec<OsString>>();
         let cli_pars = cli_reader::fetch_valid_arguments(test_args).unwrap();
 
         let _res = get_params(cli_pars, &config_string).unwrap();
     }
+
+
+
+    #[test]
+    fn check_a_cli_flag_read_correctly() {
+
+         let config = r#"
+ [data]
+ data_date="2025-06-25"
+
+ [folders]
+ log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ 
+ [database]
+ db_host="localhost"
+ db_user="user_name"
+ db_password="password"
+ db_port="5432"
+ db_name="aact"
+ who_db_name="who"
+ cxt_db_name="cxt"
+ cgt_db_name="cgt"
+
+ "#;
+ let config_string = config.to_string();
+        config_reader::populate_config_vars(&config_string).unwrap();
+
+        let args : Vec<&str> = vec!["dummy target", "-a", "-d", "2025-08-04"];
+        let test_args = args.iter().map(|x| x.to_string().into()).collect::<Vec<OsString>>();
+        let cli_pars = cli_reader::fetch_valid_arguments(test_args).unwrap();
+
+        let res = get_params(cli_pars, &config_string).unwrap();
+
+        assert_eq!(res.data_date, "2025-08-04");
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.flags.process_mdr_data, true);
+        assert_eq!(res.flags.process_iec_data, true);
+        assert_eq!(res.flags.code_data, false);
+        assert_eq!(res.flags.transfer_to_who, false);
+        assert_eq!(res.flags.overwrite_ctg, false);   
+        assert_eq!(res.flags.test_run, false);
+
+    }
+
+
+    #[test]
+    fn check_cli_flags_read_correctly() {
+    let config = r#"
+ [data]
+ data_date="2025-06-25"
+
+ [folders]
+ log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ 
+ [database]
+ db_host="localhost"
+ db_user="user_name"
+ db_password="password"
+ db_port="5432"
+ db_name="aact"
+ who_db_name="who"
+ cxt_db_name="cxt"
+ cgt_db_name="cgt"
+
+ "#;
+
+ let config_string = config.to_string();
+        config_reader::populate_config_vars(&config_string).unwrap();
+
+        let args : Vec<&str> = vec!["dummy target", "-m", "-e", "-t", "-c", "-v"];
+
+
+        let test_args = args.iter().map(|x| x.to_string().into()).collect::<Vec<OsString>>();
+        let cli_pars = cli_reader::fetch_valid_arguments(test_args).unwrap();
+
+        let res = get_params(cli_pars, &config_string).unwrap();
+
+        assert_eq!(res.data_date, "2025-06-25");
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.flags.process_mdr_data, true);
+        assert_eq!(res.flags.process_iec_data, true);
+        assert_eq!(res.flags.code_data, true);
+        assert_eq!(res.flags.transfer_to_who, true);
+        assert_eq!(res.flags.overwrite_ctg, true);   
+        assert_eq!(res.flags.test_run, false);
+        
+    }
+
+
+
+
+    
 }
 

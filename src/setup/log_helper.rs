@@ -71,10 +71,9 @@
      info!("");
      info!("************************************");
      info!("");
-     info!("data_folder: {}", ip.data_folder.display());
      info!("log_folder: {}", ip.log_folder.display());
-     info!("import_data: {}", ip.flags.import_data);
-     info!("include non Latin: {}", ip.flags.include_nonlatin);
+     info!("import_data: {}", ip.flags.process_mdr_data);
+     info!("include non Latin: {}", ip.flags.process_iec_data);
      info!("");
      info!("************************************");
      info!("");

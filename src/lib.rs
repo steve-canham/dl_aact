@@ -22,6 +22,10 @@ pub async fn run(args: Vec<OsString>) -> Result<(), AppError> {
     setup::establish_log(&params)?;
     let _pool = setup::get_db_pool().await?;
             
+    
+    
+
+
 
     Ok(())  
 }

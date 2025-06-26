@@ -1,41 +1,55 @@
+The ad.studies table used in this process has some (relatively minor) differences from the corresponding tables in other databases, i.e. in the previous version of the MDR.
+The changes shopwn here will eventually be migrated to other databases. The differences between ad.studies and the previous mdr version are listed below.
 
-Differences between ad.studies and the previous mdr version
-
-The differences are mostly superficial, but some changes should be noted.
 1) The initial group of 5 fields: id, sd_sid, display_title, title_lang_code, and brief description, and the final field (added_on) are exactly the same in both tables.
+
 2) The study_start_year and study_start_month fields have had their names simplified to start_year and start_month but are otherwise exactly the same.
+
 3) There are six new fields, representing three new additional pairs of date data (year and month, as integers, in each case).
 These refer to:
 the date of registration (= date of first post in CTG): reg_year and reg_month,
 the date of study completion (when given): comp_year and comp_month, and 
 the date of results publication (= results first posted in CTG): res_year and res_month.
+
 The first and third of these are also present (and always were present in the MDR) within the registry page and registry results page data objects.
 They are therefore redundant but included in this table to make processing based on these dates simpler and quicker.
 The date of completion is a new addition. Though often present as an estimate rather than an actual date, (when present at all) it has been included 
 to allow additional data processing (e.g. looking at study lengths in different phases). 
+
 4) The study_type_id has its name simplified to type_id. The codes used for the different types have been slightly changed - see Changes to study type below.
+
 5) The study_status_id has its name simplified to status_id. The codes used for the different statuses have also been simplified - see Changes to study status below.
+
 6) The study_enrolment field has had its name simplified to just 'enrolment' (still the UK rather than the US spelling of 'enrollment'). 
 It remains a varchar field, as it was in the MDR, even though in some systems, including the CGT, it is always an integer. 
 In other systems it may contain a small phrase, or provide enrolment figures for two or more subgroups - hence the need for a varchar field.
+
 7) The enrolment figure type is included as an integer, enrolment_type_id, with 1 = 'actual', 2 = 'estimated'. 
 This is a new field, added to allow estimates to be more clearly flagged to users of the data. Most source systems support the same distinction.
+
 8) The study_gender_elig_id has had its name simplified to gender_flag. The codes are also simplified: (1 = Female only, 2 = Male only, 3 = Both).
+
 9) The 4 age data fields, min_age, min_age_units_id, max_age, max_age_units_id are exactly the same in both tables. 
 The codes used for age units (e.g. 17 for years, is eactly the same as before.
+
 10) An age_group_flag has been added. This summarises the min / max age data when it exists, 
 indicating if the study is open to children (<18), and / or adults (18-65), and / or older adults (65+). 
+
 Note that studies with no min or max ages included have null for this field - i.e. there is no assumption that the lack of min and max fields means that 
 the study is open to all ages - it is more likely that the relevant information has simply not been supplied.
 The reasons for adding this field was to make it easier to search studies using these broad age ranges rather than specific minimum and maximum ages,
 and also easier to integrate data from sources (particularly the EU CTR) which only supplies age data in terms of these broad age groupings.
+
 11) The iec_level flag has been renamed iec_flag. Its function remains the same - to indicate the level of inclusion / exclusion criteria available for that study. 
 The significance of the exact values stored in the flag have changed to make them more logical - see iec_flag values below.
+
 12) The data_sharing_statement field has had its name simplified to ipd_sharing, and moved towards the end of the table, but its content remains exactly the same as before.
+
 13) The datetime_of_data_fetch field has had its name simplified to dt_of_data_fetch but otherwise is exactly the same.
 
-Thus the only 'true' additions in the new version of the study table consists of the study completion year and month, the enrolment type indicator. and the age group flag. If retained in any final system 
-this would warrent a change in the associated metadata schema.
+Thus the only 'true' additions in the new version of the study table consists of the study completion year and month, the enrolment type indicator, and the age group flag. If retained in any final system 
+these additions would warrent a change in the associated metadata schema.
+
 The other changes consist of simplifying field names, changing integer codes in a few instances (again to make them simpler / more logical) and adding redundant data information that is present elsewhere.
 Whether or not they need to be reflected in any schema would again probably depend on how the data was presented to end users.
 
@@ -112,16 +126,16 @@ Previously, study type was coded as
 
 This has now been changed to ...
 
-11  Interventional    (from any type beginning with 'intervent', or BA/BE (= bio-availabilty / bio-equivalence, Indian registry only)
+11  Interventional    (from any type beginning with 'intervent', or BA/BE (= bio-availabilty / bio-equivalence, Indian registry only))
 12  Observational     (from any type beginning with 'observ' or 'epidem', or 'PMS' (= post market surveillence), or 'Relative factors research', or 'Cause' or 'Relative factors study'
-                      or 'Health Services Research' or 'Health services reaserch'
+                      or 'Health Services Research' or 'Health services reaserch')
 13  Patient registry  (or 'Observational patient registry')
 14  Expanded access   (Used by CGT only) a.k.a. compassionate use
 15  Funded programme  (source??)
 16  Diagnostic test   (Chinese registry only)
 98  Not applicable    (from 'not applicable', 'N/A')
-99  Other             (from 'other' or 'others', or 'meta-analysis etc', or 'basic science' or 'Prevention' or 'screening' or 'treatment study'
-0   Not provided      (from null value, 'unknown', 'Not provided', 'Not Specified'
+99  Other             (from 'other' or 'others', or 'meta-analysis etc', or 'basic science' or 'Prevention' or 'screening' or 'treatment study')
+0   Not provided      (from null value, 'unknown', 'Not provided', 'Not Specified')
 
 The main change is thus the introduction of the 'Diagnostic Test' type with code 16 and the use of 99 for 'other' (rather than 16, as before)
 
@@ -150,16 +164,16 @@ The new coding is
 
 10  Not yet recruiting               (from 'Not yet recruiting', 'pending' 'without startig enrollment', (sic), 'preinitiation')
 12  Withdrawn                        (from 'Withdrawn')
-14  Recruiting                       (from 'Recruiting', 'open public recruiting', 'open to recruitment', 'in enrollment'
+14  Recruiting                       (from 'Recruiting', 'open public recruiting', 'open to recruitment', 'in enrollment')
 16  Enrolling by invitation          (from CTG)
 18  Ongoing, no longer recruiting    (from 'Active, not recruiting')
-20  Ongoing, recruitment unclear     (from 'Available', 'ongoing', 'authorised-recruitment may be ongoing or finished'
-25  Suspended                        (from 'suspended', 'temporarily closed', 'temporary halt' 
-30  Completed                        (from 'Completed', 'Approved for marketing'
-32  Terminated                       (from 'Terminated', 'stopped early', 'stopped'
+20  Ongoing, recruitment unclear     (from 'Available', 'ongoing', 'authorised-recruitment may be ongoing or finished')
+25  Suspended                        (from 'suspended', 'temporarily closed', 'temporary halt')
+30  Completed                        (from 'Completed', 'Approved for marketing')
+32  Terminated                       (from 'Terminated', 'stopped early', 'stopped')
 98  Not applicable                   (from 'not applicable')
 99  Other                            (from any not in any other category - normally would require further investigation).
-0   Not provided                     (from null value, 'Withheld', 'No longer available', 'temporarily not available'
+0   Not provided                     (from null value, 'Withheld', 'No longer available', 'temporarily not available')
 
 =======================
 iec_values
@@ -188,3 +202,4 @@ Because inclusion and exclusion critera are usually presented together, the foll
 --36  Single inclusion + Multiple exclusion: A single statement for inclusion criteria but multiple exclusion criteria
 --24  Multiple inclusion + Single exclusion: Multiple inclusion criteria but with a single statement covering exclusion
 --40  Multiple inclusion + exclusion: Sets of both inclusion and exclusion criteria statements
+
