@@ -1,5 +1,10 @@
 
 pub mod setup;
+pub mod mdr;
+pub mod iec;
+pub mod encode;
+pub mod who;
+pub mod ctg;
 pub mod err;
 
 use setup::cli_reader;
@@ -20,11 +25,27 @@ pub async fn run(args: Vec<OsString>) -> Result<(), AppError> {
                               
     let params = setup::get_params(cli_pars, &config_string)?;
     setup::establish_log(&params)?;
-    let _pool = setup::get_db_pool().await?;
+    let pool = setup::get_db_pool().await?;
             
-    
-    
+    if params.flags.process_mdr_data {
+        mdr::do_mdr_import(&pool).await?;
+    }
+     
+    if params.flags.process_iec_data {
+        iec::do_iec_import(&pool).await?;
+    }
 
+    if params.flags.code_data {
+        encode::do_data_encoding(&pool).await?;
+    }
+
+    if params.flags.transfer_to_who {
+        who::do_who_transfer(&pool).await?;
+    }
+
+    if params.flags.overwrite_ctg {
+        ctg::do_ctg_overwrite(&pool).await?;
+    }
 
 
     Ok(())  

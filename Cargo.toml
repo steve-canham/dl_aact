@@ -1,5 +1,5 @@
 [package]
-name = "dl_ctg"
+name = "dl_aact"
 version = "0.1.0"
 authors = ["Steve Canham <stevecanham@outlook.com>"]
 edition = "2021"
@@ -9,7 +9,7 @@ path = "src/lib.rs"
 
 [[bin]]
 path = "src/main.rs"
-name = "dl_ctg"
+name = "dl_aact"
 
 [dependencies]
 serde = { version = "1.0.217", features = ["derive"] }
