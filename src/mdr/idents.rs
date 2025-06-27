@@ -3,6 +3,32 @@
 /* 
 
 
+---------------------------------------------------------------
+--STUDY TITLES
+---------------------------------------------------------------
+
+
+-- all studies appear to have a 'brief title'
+
+insert into ad.study_titles (sd_sid, title_type_id, title_text, is_default, comments)
+select nct_id, 15, brief_title, true, 'brief title in clinicaltrials.gov'
+from ctgov.studies;
+
+insert into ad.study_titles (sd_sid, title_type_id, title_text, is_default, comments)
+select nct_id, 16, official_title, false, 'official title in clinicaltrials.gov'
+from ctgov.studies s
+where s.official_title is not null and s.official_title <> s.brief_title;
+
+insert into ad.study_titles (sd_sid, title_type_id, title_text, is_default)
+select nct_id, 14, acronym, false
+from ctgov.studies
+where acronym is not null;
+        
+SELECT pg_size_pretty(pg_total_relation_size('ad.study_titles'));
+VACUUM (FULL, VERBOSE, ANALYZE) ad.study_titles;
+SELECT pg_size_pretty(pg_total_relation_size('ad.study_titles'));
+
+
 DROP TABLE IF EXISTS ad.study_identifiers;
 CREATE TABLE ad.study_identifiers(
     id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
@@ -18,6 +44,20 @@ CREATE TABLE ad.study_identifiers(
   , coded_on               TIMESTAMPTZ     NULL                                     
 );
 CREATE INDEX study_identifiers_sid ON ad.study_identifiers(sd_sid);
+
+
+DROP TABLE IF EXISTS ad.study_titles;
+REATE TABLE ad.study_titles(
+    id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
+  , sd_sid                 VARCHAR         NOT NULL
+  , title_type_id          INT
+  , title_text             VARCHAR
+  , lang_code              VARCHAR         NOT NULL default 'en'
+  , is_default             BOOL
+  , comments               VARCHAR
+  , added_on               TIMESTAMPTZ     NOT NULL default now()
+);
+CREATE INDEX study_titles_sid ON ad.study_titles(sd_sid);
 
 
 -- a LOT of cleaning required. Best done manually, in turn.

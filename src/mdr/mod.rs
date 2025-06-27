@@ -1,13 +1,32 @@
-use crate::err::AppError;
-use sqlx::postgres::PgPool;
+mod studies;
+mod idents;
+mod locs;
+mod peoporgs;
+mod keywords;
+mod links;
+mod dataobjs;
 
-pub async fn do_mdr_import(_pool: &PgPool) -> Result<(), AppError> {  
+
+use sqlx::{postgres::PgQueryResult, Pool, Postgres};
+use crate::AppError;
+
+pub async fn do_mdr_import(pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     // Simplify the aact tables after initial restore of posthres.dmp file
     
+    // Remove tables not required (mostly from results details section).
+    // Then clarify the very big studies table by dropping unused fields
+
+    execute_sql(drop_tables_a_sql(), pool).await?;
+    execute_sql(drop_tables_b_sql(), pool).await?;
+
+    execute_sql(drop_columns_a_sql(), pool).await?;
+    execute_sql(drop_columns_b_sql(), pool).await?;
 
     // create the ad.studies table and load most of that data
 
+    studies::build_studies_table(pool).await?;
+    studies::load_studies_data(pool).await?;
 
     // create, fill and tidy the secondary identifiers
 
@@ -35,83 +54,90 @@ pub async fn do_mdr_import(_pool: &PgPool) -> Result<(), AppError> {
 }
 
 
-/*
+
+async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResult, AppError> {
+    
+    sqlx::raw_sql(&sql).execute(pool)
+        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))
+}
 
 
-		
--- Remove tables not required (mostly from results details section).
--- This also removes the biggest tables
-
-drop table if exists ctgov.baseline_counts cascade;
-drop table if exists ctgov.baseline_measurements cascade;
-drop table if exists ctgov.design_groups cascade;
-drop table if exists ctgov.design_outcomes cascade;
-drop table if exists ctgov.design_group_interventions cascade;
-drop table if exists ctgov.facility_contacts cascade;
-drop table if exists ctgov.facility_investigators cascade;
-drop table if exists ctgov.browse_conditions cascade;
-drop table if exists ctgov.browse_interventions cascade;
-drop table if exists ctgov.detailed_descriptions cascade;
-
-drop table if exists ctgov.drop_withdrawals cascade;
-drop table if exists ctgov.milestones cascade;
-drop table if exists ctgov.outcome_analyses cascade;
-drop table if exists ctgov.outcome_analysis_groups cascade;
-drop table if exists ctgov.outcome_counts cascade;
-drop table if exists ctgov.outcome_measurements cascade;
-drop table if exists ctgov.participant_flows cascade;
-drop table if exists ctgov.pending_results cascade;
-drop table if exists ctgov.reported_events cascade;
-drop table if exists ctgov.reported_event_totals cascade;
-drop table if exists ctgov.result_agreements cascade;
-drop table if exists ctgov.result_groups cascade;
-drop table if exists ctgov.search_results cascade;
-drop table if exists ctgov.search_terms cascade;
-drop table if exists ctgov.search_term_results cascade;
-drop table if exists ctgov.study_searches cascade;
-		
--- Clarify this very big table by dropping unused fields
-
-ALTER TABLE ctgov.studies
-DROP COLUMN nlm_download_date_description,
-DROP COLUMN verification_month_year,
-DROP COLUMN verification_date,
-DROP COLUMN disposition_first_submitted_date,
-DROP COLUMN disposition_first_submitted_qc_date,
-DROP COLUMN disposition_first_posted_date,
-DROP COLUMN disposition_first_posted_date_type,
-DROP COLUMN primary_completion_month_year,
-DROP COLUMN primary_completion_date_type,
-DROP COLUMN primary_completion_date,
-DROP COLUMN number_of_arms,
-DROP COLUMN number_of_groups,
-DROP COLUMN is_ppsd,
-DROP COLUMN is_us_export,
-DROP COLUMN has_dmc,
-DROP COLUMN delayed_posting;
+fn drop_tables_a_sql <'a>() -> &'a str {
+    r#"SET client_min_messages TO WARNING; 
+    drop table if exists ctgov.baseline_counts cascade;
+    drop table if exists ctgov.baseline_measurements cascade;
+    drop table if exists ctgov.design_groups cascade;
+    drop table if exists ctgov.design_outcomes cascade;
+    drop table if exists ctgov.design_group_interventions cascade;
+    drop table if exists ctgov.facility_contacts cascade;
+    drop table if exists ctgov.facility_investigators cascade;
+    drop table if exists ctgov.browse_conditions cascade;
+    drop table if exists ctgov.browse_interventions cascade;
+    drop table if exists ctgov.detailed_descriptions cascade;"#
+}
 
 
-ALTER TABLE ctgov.studies
-DROP COLUMN study_first_submitted_date,
-DROP COLUMN results_first_submitted_date,
-DROP COLUMN last_update_submitted_date,
-DROP COLUMN study_first_submitted_qc_date,
-DROP COLUMN results_first_submitted_qc_date,
-DROP COLUMN last_update_submitted_qc_date,
-DROP COLUMN target_duration,
-DROP COLUMN baseline_population,
-DROP COLUMN limitations_and_caveats,
-DROP COLUMN is_fda_regulated_drug,
-DROP COLUMN is_fda_regulated_device,
-DROP COLUMN is_unapproved_device,
-DROP COLUMN source,
-DROP COLUMN source_class,
-DROP COLUMN fdaaa801_violation,
-DROP COLUMN baseline_type_units_analyzed;
-
---select * from ctgov.studies
-
-create schema if not exists ad;
+fn drop_tables_b_sql <'a>() -> &'a str {
+    r#"SET client_min_messages TO WARNING; 
+    drop table if exists ctgov.drop_withdrawals cascade;
+    drop table if exists ctgov.milestones cascade;
+    drop table if exists ctgov.outcome_analyses cascade;
+    drop table if exists ctgov.outcome_analysis_groups cascade;
+    drop table if exists ctgov.outcome_counts cascade;
+    drop table if exists ctgov.outcome_measurements cascade;
+    drop table if exists ctgov.participant_flows cascade;
+    drop table if exists ctgov.pending_results cascade;
+    drop table if exists ctgov.reported_events cascade;
+    drop table if exists ctgov.reported_event_totals cascade;
+    drop table if exists ctgov.result_agreements cascade;
+    drop table if exists ctgov.result_groups cascade;
+    drop table if exists ctgov.search_results cascade;
+    drop table if exists ctgov.search_terms cascade;
+    drop table if exists ctgov.search_term_results cascade;
+    drop table if exists ctgov.study_searches cascade;"#
+}
 
 
-*/
+fn drop_columns_a_sql <'a>() -> &'a str {
+    r#"SET client_min_messages TO WARNING; 
+    ALTER TABLE ctgov.studies
+    DROP COLUMN if exists nlm_download_date_description,
+    DROP COLUMN if exists verification_month_year,
+    DROP COLUMN if exists verification_date,
+    DROP COLUMN if exists disposition_first_submitted_date,
+    DROP COLUMN if exists disposition_first_submitted_qc_date,
+    DROP COLUMN if exists disposition_first_posted_date,
+    DROP COLUMN if exists disposition_first_posted_date_type,
+    DROP COLUMN if exists primary_completion_month_year,
+    DROP COLUMN if exists rimary_completion_date_type,
+    DROP COLUMN if exists primary_completion_date,
+    DROP COLUMN if exists number_of_arms,
+    DROP COLUMN if exists number_of_groups,
+    DROP COLUMN if exists is_ppsd,
+    DROP COLUMN if exists is_us_export,
+    DROP COLUMN if exists has_dmc,
+    DROP COLUMN if exists delayed_posting;"#
+}
+
+
+fn drop_columns_b_sql <'a>() -> &'a str {
+    r#"SET client_min_messages TO WARNING; 
+    ALTER TABLE ctgov.studies
+    DROP COLUMN if exists study_first_submitted_date,
+    DROP COLUMN if exists results_first_submitted_date,
+    DROP COLUMN if exists last_update_submitted_date,
+    DROP COLUMN if exists study_first_submitted_qc_date,
+    DROP COLUMN if exists results_first_submitted_qc_date,
+    DROP COLUMN if exists last_update_submitted_qc_date,
+    DROP COLUMN if exists target_duration,
+    DROP COLUMN if exists baseline_population,
+    DROP COLUMN if exists limitations_and_caveats,
+    DROP COLUMN if exists is_fda_regulated_drug,
+    DROP COLUMN if exists s_fda_regulated_device,
+    DROP COLUMN if exists is_unapproved_device,
+    DROP COLUMN if exists source,
+    DROP COLUMN if exists source_class,
+    DROP COLUMN if exists fdaaa801_violation,
+    DROP COLUMN if exists baseline_type_units_analyzed;
+    SET client_min_messages TO NOTICE;"#
+}

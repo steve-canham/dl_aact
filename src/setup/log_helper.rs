@@ -72,8 +72,12 @@
      info!("************************************");
      info!("");
      info!("log_folder: {}", ip.log_folder.display());
-     info!("import_data: {}", ip.flags.process_mdr_data);
-     info!("include non Latin: {}", ip.flags.process_iec_data);
+     info!("import mdr data: {}", ip.flags.process_mdr_data);
+     info!("import iec data: {}", ip.flags.process_iec_data);
+     info!("encode data: {}", ip.flags.code_data);
+     info!("transfer to who DB: {}", ip.flags.transfer_to_who);
+     info!("overwrite ctg DB: {}", ip.flags.overwrite_ctg);
+     info!("test run: {}", ip.flags.test_run);
      info!("");
      info!("************************************");
      info!("");
