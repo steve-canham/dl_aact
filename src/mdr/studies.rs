@@ -1,11 +1,16 @@
-use sqlx::{postgres::PgQueryResult, Pool, Postgres};
+/*
+use super::utils;
+
+use sqlx::{Pool, Postgres};
 use crate::AppError;
 use log::info;
+use chrono::Datelike;
 
-
+ 
 pub async fn build_studies_table (pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
-    let sql = r#"create schema if not exists ad;
+    let sql = r#"SET client_min_messages TO WARNING; 
+    create schema if not exists ad;
 	DROP TABLE IF EXISTS ad.studies;
 	CREATE TABLE ad.studies(
 	  id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY  (start with 1000001 increment by 1)
@@ -37,12 +42,12 @@ pub async fn build_studies_table (pool: &Pool<Postgres>) -> Result<(), AppError>
 	, age_group_flag         INT             NOT NULL default 0
 	, iec_flag               INT             NOT NULL default 0 
 	, ipd_sharing			 VARCHAR         NULL
-	, dt_of_data_fetch	     TIMESTAMPTZ     NULL
+	, dt_of_data    	     TIMESTAMPTZ     NULL
 	, added_on               TIMESTAMPTZ     NOT NULL default now()
 	);
 	CREATE INDEX studies_sid ON ad.studies(sd_sid);"#;
 
-	execute_sql(sql, pool).await?;
+	utils::execute_sql(sql, pool).await?;
     info!("studies table (re)created");
     
     Ok(())
@@ -50,113 +55,42 @@ pub async fn build_studies_table (pool: &Pool<Postgres>) -> Result<(), AppError>
 }
 
 
-pub async fn load_studies_data (pool: &Pool<Postgres>) -> Result<(), AppError> {  
+pub async fn load_studies_data (data_date: &str, max_id: u64, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
-    let sql= "select max(nct_id) from ctgov.studies";
-	let res: String = sqlx::query_scalar(&sql).fetch_one(pool)
-		.await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
-    let res_as_string = &res[3..].to_string();
-    
-	let max_id: u64 = res_as_string.parse()
-			.map_err(|e| AppError::ParseError(e))?;
-    
-    let rec_num = execute_phased_transfer(core_study_data_sql(), max_id, pool).await?;
-    info!("{} study records created", rec_num);
+    let chunk_size = 2000000;
+    let rec_num = utils::execute_phased_transfer(core_study_data_sql(), max_id, chunk_size, " where ", "core study records", pool).await?;
 
 	let chunk_size = 150000;
+    utils::execute_phased_update(registries_update_sql(), rec_num, chunk_size, "registries identified", pool).await?;
+    utils::execute_phased_update(status_sql(), rec_num, chunk_size, "statuses inserted", pool).await?;
+    utils::execute_phased_update(last_known_status_sql(), rec_num, chunk_size, "statuses added using last known statuses", pool).await?;
+    utils::execute_phased_update(descriptions_sql(), rec_num, chunk_size, "study descriptions added", pool).await?;
 
-    execute_phased_update(registries_update_sql(), rec_num, chunk_size, "identifying registries", pool).await?;
-    execute_phased_update(status_sql(), rec_num, chunk_size, "updating statuses", pool).await?;
-    execute_phased_update(last_known_status_sql(), rec_num, chunk_size, "using last known statuses", pool).await?;
-	info!("");
+    utils::execute_phased_update(min_and_max_age_sql(), rec_num, chunk_size, "min / max ages inserted", pool).await?;
+    utils::execute_phased_update(age_group_child_sql(), rec_num, chunk_size, "child studies identified", pool).await?;
+    utils::execute_phased_update(age_group_adult_sql(), rec_num, chunk_size, "adult studies identified", pool).await?;
+    utils::execute_phased_update(age_group_elderly_sql(), rec_num, chunk_size, "elderly studies identified", pool).await?;
+    utils::execute_phased_update(gender_flag_sql(), rec_num, chunk_size, "gender eligibilities inserted", pool).await?;
 
-    execute_phased_update(descriptions_sql(), rec_num, chunk_size, "adding study descriptions", pool).await?;
-	info!("");
+	utils::execute_phased_update(update_start_date_types_sql(), rec_num, chunk_size, "start date types updated", pool).await?;
+	utils::execute_phased_update(update_comp_date_types_sql(), rec_num, chunk_size, "comp date types updated", pool).await?;
+	utils::execute_phased_update(completed_status_1_sql(), rec_num, chunk_size, "comp statuses updated using result dates", pool).await?;
+	utils::execute_phased_update(completed_status_2_sql(), rec_num, chunk_size, "comp statuses updated using comp dates", pool).await?;
+	let sql_string = completed_status_3_sql();  // Function returns a string rather than &str
+	utils::execute_phased_update(&sql_string, rec_num, chunk_size, "comp statuses updated using est. comp dates on older studies", pool).await?;
 
-    execute_phased_update(min_and_max_age_sql(), rec_num, chunk_size, "inserting min and max ages", pool).await?;
-    info!("");
-    execute_phased_update(age_group_1_sql(), rec_num, chunk_size, "child studies identified", pool).await?;
-    execute_phased_update(age_group_2_sql(), rec_num, chunk_size, "adult studies identified", pool).await?;
-    execute_phased_update(age_group_4_sql(), rec_num, chunk_size, "elderly studies identified", pool).await?;
-	info!("");
+	utils::execute_phased_update(ipd_1_sql(), rec_num, chunk_size, "ipd basics added", pool).await?;
+	utils::execute_sql(ipd_2_sql(), pool).await?;
+	utils::execute_phased_update(ipd_3_sql(), rec_num, chunk_size, "ipd details added", pool).await?;
+	utils::execute_sql(ipd_4_sql(), pool).await?;
 
-    execute_phased_update(gender_flag_sql(), rec_num, chunk_size, "gender eligibility inserted", pool).await?;
-	info!("");
+	let sql_string = max_date_sql(data_date);  // Function returns a string rather than &str
+	utils::execute_phased_update(&sql_string, rec_num, chunk_size, "dates of data set inserted", pool).await?;
 
-	execute_phased_update(max_date_sql(), rec_num, chunk_size, "updating date of data set", pool).await?;
-	info!("");
-
-	execute_phased_update(update_start_date_types_sql(), rec_num, chunk_size, "updating start date types", pool).await?;
-	execute_phased_update(update_comp_date_types_sql(), rec_num, chunk_size, "updating comp date types", pool).await?;
-	info!("");
-	execute_phased_update(completed_status_1_sql(), rec_num, chunk_size, "updating comp status using result dates", pool).await?;
-	execute_phased_update(completed_status_2_sql(), rec_num, chunk_size, "updating comp status using comp dates", pool).await?;
-	execute_phased_update(completed_status_3_sql(), rec_num, chunk_size, "updating comp status using est. comp dates on older studies", pool).await?;
-	info!("");
-
-	execute_phased_update(ipd_1_sql(), rec_num, chunk_size, "ipd basics added", pool).await?;
-	execute_sql(ipd_2_sql(), pool).await?;
-	execute_phased_update(ipd_3_sql(), rec_num, chunk_size, "ipd details added", pool).await?;
-	execute_sql(ipd_4_sql(), pool).await?;
-	info!("");
-	
-	execute_sql(vacuum_sql(), pool).await?;
-	info!("vacuum carried out on studies table");
+	utils::vacuum_table("studies", pool).await?;
     
     Ok(())
 
-}
-
-
-async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResult, AppError> {
-    
-    sqlx::raw_sql(&sql).execute(pool)
-        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))
-}
-
-
-async fn execute_phased_transfer(sql: &str, max_id: u64, pool: &Pool<Postgres>) -> Result<u64, AppError> {
-    
-	let mut rec_num: u64 = 0;
-	let mut start_num: u64 = 0;
-	let chunk_size = 2000000;
-
-	while start_num <= max_id {
-
-		let end_num = start_num + chunk_size;
-		let chunk_sql = format!("c.nct_id >= 'NCT{:0>8}' and c.nct_id < 'NCT{:0>8}';", start_num, end_num);
-        let chsql = sql.to_string() + " where " + &chunk_sql;
-		let res = sqlx::raw_sql(&chsql).execute(pool)
-			.await.map_err(|e| AppError::SqlxError(e, chsql.to_string()))?;
-		let recs = res.rows_affected();
-        rec_num += recs;
-		info!("{} study core records transferred, {}", recs, chunk_sql);
-
-		start_num = end_num;
-	}
-
-	Ok(rec_num)
-}
-
-
-
-async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fback: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
-
-	for i in (0..rec_num).step_by(chunk_size.try_into().unwrap()) {
-        
-		let start_num = i + 1000001;
-        let mut end_num = start_num + chunk_size - 1;
-		if end_num > rec_num + 1000001 {
-			end_num = rec_num + 1000000;
-		}
-		let chunk_sql = format!("s.id >= {} and s.id <= {};", start_num, end_num);
-        let chsql = sql.to_string() + " and " + &chunk_sql;
-		sqlx::raw_sql(&chsql).execute(pool)
-			.await.map_err(|e| AppError::SqlxError(e, chsql.to_string()))?;
-        info!("{}, {}", fback, chunk_sql);
-    }
-
-	Ok(())
 }
 
 
@@ -265,7 +199,7 @@ fn min_and_max_age_sql <'a>() -> &'a str {
 	where s.sd_sid = c.nct_id "#
 }
 
-fn age_group_1_sql <'a>() -> &'a str {
+fn age_group_child_sql <'a>() -> &'a str {
     r#"update ad.studies s
 	set age_group_flag = 1
 	from ctgov.eligibilities c
@@ -274,7 +208,7 @@ fn age_group_1_sql <'a>() -> &'a str {
 }
 
 
-fn age_group_2_sql <'a>() -> &'a str {
+fn age_group_adult_sql <'a>() -> &'a str {
     r#"update ad.studies s
 	set age_group_flag = age_group_flag + 2
 	from ctgov.eligibilities c
@@ -283,7 +217,7 @@ fn age_group_2_sql <'a>() -> &'a str {
 }
 
 
-fn age_group_4_sql <'a>() -> &'a str {
+fn age_group_elderly_sql <'a>() -> &'a str {
     r#"update ad.studies s
 	set age_group_flag = age_group_flag + 4
 	from ctgov.eligibilities c
@@ -299,15 +233,11 @@ fn gender_flag_sql <'a>() -> &'a str {
 	where s.sd_sid = c.nct_id "#
 }
 
-fn max_date_sql <'a>() -> &'a str {
-    r#"update ad.studies s
-	set dt_of_data_fetch = dt.max
-	from
-	(select max(updated_at) as max from ctgov.studies ) as dt
-	where id > 1 "#
-}
 
 fn update_start_date_types_sql <'a>() -> &'a str {
+
+	// Partial dates are often not given a status.
+	// Here forced to 'e' for estimated.
 
     r#"update ad.studies s
 	set start_date_type = 'e'
@@ -316,6 +246,9 @@ fn update_start_date_types_sql <'a>() -> &'a str {
 }
 
 fn update_comp_date_types_sql <'a>() -> &'a str {
+
+	// Partial dates are often not given a status.
+	// Here forced to 'e' for estimated.
 
     r#"update ad.studies s
 	set comp_date_type = 'e'
@@ -352,21 +285,28 @@ fn completed_status_2_sql <'a>() -> &'a str {
 }
 
 
-fn completed_status_3_sql <'a>() -> &'a str {
+fn completed_status_3_sql () -> String {
 
 	// update studies to 'complete' if a 'estimated' 
-    // complete date present before 2020 - 5 years ago at least
+    // complete date present 3 years ago at least.
     // If not already 'complete' or 'terminated'
     // (leaving 'withdrawn' and 'suspended', if any, as they are)
-	// Need to calculate the cut off point rather than have it set
 
-    r#"update ad.studies s
+	let current_date = chrono::Utc::now();
+    let current_year = current_date.year();
+    let current_month = current_date.month();
+
+	let target_year = current_year - 3;
+
+    format!(r#"update ad.studies s
 	set status_id = 30
-	where s.comp_year < 2020
+	where (s.comp_year < {}
+	or (s.comp_year = {} and s.comp_month < {}))
 	and s.status_id < 30
 	and s.status_id <> 12 
 	and s.status_id <> 25
-	and s.comp_date_type = 'e' "#
+	and s.comp_date_type = 'e' "#, target_year, target_year, current_month)
+	
 }
 
 
@@ -447,12 +387,13 @@ fn ipd_4_sql <'a>() -> &'a str {
 }
 
 
-fn vacuum_sql <'a>() -> &'a str {
-	
-	// Normally leave until final updates...after iec_flag calculated
+fn max_date_sql (data_date: &str) -> String {
 
-	// SELECT pg_size_pretty(pg_total_relation_size('ad.studies'));
-	r#"VACUUM (FULL, VERBOSE, ANALYZE) ad.studies;"#
-	// SELECT pg_size_pretty(pg_total_relation_size('ad.studies'));
+	// data_date pre-checked as being a valid date in ISO format.
+	
+    format!(r#"update ad.studies s
+	set dt_of_data = '{}'
+	where id > 1 "#, data_date)
 }
 
+*/

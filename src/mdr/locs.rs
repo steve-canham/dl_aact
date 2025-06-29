@@ -1,26 +1,62 @@
+use super::utils;
+
+use sqlx::{Pool, Postgres};
+use crate::AppError;
+use log::info;
 
 
+pub async fn build_locations_table (pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    let sql = r#"SET client_min_messages TO WARNING; 
+    DROP TABLE IF EXISTS ad.study_locations;
+    CREATE TABLE ad.study_locations(
+      id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
+    , sd_sid                 VARCHAR         NOT NULL
+    , facility_org_id        INT             NULL
+    , facility               VARCHAR         NULL
+    , facility_ror_id        VARCHAR         NULL
+    , city_id                INT             NULL
+    , city_name              VARCHAR         NULL
+    , disamb_id              INT             NULL
+    , disamb_name            VARCHAR         NULL
+    , country_id             INT             NULL
+    , country_name           VARCHAR         NULL
+    , status_id              INT             NULL
+    , added_on               TIMESTAMPTZ     NOT NULL default now()
+    , coded_on               TIMESTAMPTZ     NULL          
+    );
+    CREATE INDEX study_locations_sid ON ad.study_locations(sd_sid);"#;
+
+	utils::execute_sql(sql, pool).await?;
+    info!("study locations table (re)created");
+    
+    Ok(())
+
+}
+
+
+pub async fn build_countries_table (pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    let sql = r#"SET client_min_messages TO WARNING; 
+    DROP TABLE IF EXISTS ad.study_countries;
+    CREATE TABLE ad.study_countries(
+        id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
+    , sd_sid                 VARCHAR         NOT NULL
+    , country_id             INT             NULL
+    , country_name           VARCHAR         NULL
+    , status_id              INT             NULL
+    , added_on               TIMESTAMPTZ     NOT NULL default now()
+    , coded_on               TIMESTAMPTZ     NULL  default now()       -- already coded when added                                   
+    );
+    CREATE INDEX study_countries_sid ON ad.study_countries(sd_sid);"#;
+
+	utils::execute_sql(sql, pool).await?;
+    info!("study countries table (re)created");
+    
+    Ok(())
+
+}
 /*
-
-
-DROP TABLE IF EXISTS ad.study_locations;
-CREATE TABLE ad.study_locations(
-	id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
-  , sd_sid                 VARCHAR         NOT NULL
-  , facility_org_id        INT             NULL
-  , facility               VARCHAR         NULL
-  , facility_ror_id        VARCHAR         NULL
-  , city_id                INT             NULL
-  , city_name              VARCHAR         NULL
-  , disamb_id              INT             NULL
-  , disamb_name            VARCHAR         NULL
-  , country_id             INT             NULL
-  , country_name           VARCHAR         NULL
-  , status_id              INT             NULL
-  , added_on               TIMESTAMPTZ     NOT NULL default now()
-  , coded_on               TIMESTAMPTZ     NULL          
-);
-CREATE INDEX study_locations_sid ON ad.study_locations(sd_sid);
 
 
 insert into ad.study_locations(sd_sid, facility, city_name, 
@@ -214,18 +250,6 @@ geo_mdr.country_names n
 where lower(c.country_name) = n.comp_name
 
 -- 31 seconds
-
-DROP TABLE IF EXISTS ad.study_countries;
-CREATE TABLE ad.study_countries(
-	id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
-  , sd_sid                 VARCHAR         NOT NULL
-  , country_id             INT             NULL
-  , country_name           VARCHAR         NULL
-  , status_id              INT             NULL
-  , added_on               TIMESTAMPTZ     NOT NULL default now()
-  , coded_on               TIMESTAMPTZ     NULL  default now()       -- already coded when added                                   
-);
-CREATE INDEX study_countries_sid ON ad.study_countries(sd_sid);
 
 
 Insert into ad.study_countries(sd_sid, country_id, country_name)

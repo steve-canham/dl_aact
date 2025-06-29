@@ -97,7 +97,7 @@ pub async fn get_db_pool() -> Result<PgPool, AppError> {
    
     let mut opts: PgConnectOptions = db_conn_string.parse()
                     .map_err(|e| AppError::DBPoolError("Problem with parsing conection string".to_string(), e))?;
-    opts = opts.log_slow_statements(log::LevelFilter::Warn, Duration::from_secs(3));
+    opts = opts.log_slow_statements(log::LevelFilter::Warn, Duration::from_secs(5));
 
     PgPoolOptions::new()
         .max_connections(5) 
@@ -332,10 +332,6 @@ mod tests {
         assert_eq!(res.flags.test_run, false);
         
     }
-
-
-
-
     
 }
 

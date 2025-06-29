@@ -29,7 +29,7 @@ pub async fn run(args: Vec<OsString>) -> Result<(), AppError> {
             
             
     if params.flags.process_mdr_data {
-        mdr::do_mdr_import(&pool).await?;
+        mdr::do_mdr_import(&params.data_date, &pool).await?;
     }
      
     if params.flags.process_iec_data {

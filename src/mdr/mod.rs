@@ -5,60 +5,67 @@ mod peoporgs;
 mod keywords;
 mod links;
 mod dataobjs;
+mod utils;
 
 
-use sqlx::{postgres::PgQueryResult, Pool, Postgres};
+use sqlx::{Pool, Postgres};
 use crate::AppError;
+use log::info;
 
-pub async fn do_mdr_import(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+pub async fn do_mdr_import(_data_date: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     // Simplify the aact tables after initial restore of posthres.dmp file
     
     // Remove tables not required (mostly from results details section).
     // Then clarify the very big studies table by dropping unused fields
 
-    execute_sql(drop_tables_a_sql(), pool).await?;
-    execute_sql(drop_tables_b_sql(), pool).await?;
+    utils::execute_sql(drop_tables_a_sql(), pool).await?;
+    utils::execute_sql(drop_tables_b_sql(), pool).await?;
 
-    execute_sql(drop_columns_a_sql(), pool).await?;
-    execute_sql(drop_columns_b_sql(), pool).await?;
+    utils::execute_sql(drop_columns_a_sql(), pool).await?;
+    utils::execute_sql(drop_columns_b_sql(), pool).await?;
 
-    // create the ad.studies table and load most of that data
+    // Build the ad tables.
 
-    studies::build_studies_table(pool).await?;
-    studies::load_studies_data(pool).await?;
+    //studies::build_studies_table(pool).await?;
+   
+    //idents::build_titles_table(pool).await?;
+    idents::build_idents_table(pool).await?;
 
-    // create, fill and tidy the secondary identifiers
+    locs::build_locations_table(pool).await?;
+    locs::build_countries_table(pool).await?;
 
+    peoporgs::build_orgs_table(pool).await?;
+    peoporgs::build_people_table(pool).await?;
 
-    // create, fill and tidy the study location data
+    keywords::build_features_table(pool).await?;
+    keywords::build_topics_table(pool).await?;
+    keywords::build_conditions_table(pool).await?;
 
+    links::build_rels_table(pool).await?;
+    links::build_refs_table(pool).await?;
+    links::build_links_table(pool).await?;
+    links::build_ipd_available_table(pool).await?;
 
-    // create, fill and tidy the people and organisation data
+    dataobjs::build_data_objects_table(pool).await?;
+    dataobjs::build_datasets_table(pool).await?;
+    dataobjs::build_obj_instances_table(pool).await?;
+    dataobjs::build_obj_titles_table(pool).await?;
+    dataobjs::build_obj_dates_table(pool).await?;
 
+    utils::execute_sql(set_messages_to_notice(), pool).await?;
+    info!("");
 
-    // create, fill and tidy the features, conditions and keyword data
+    // Load the data.
 
+    let max_id = get_max_nct_id(pool).await?;
 
-    // create, fill and tidy the refs, links and ipd data
+    //studies::load_studies_data(data_date, max_id, pool).await?;
+    //idents::load_titles_data (max_id, pool).await?;
+    idents::load_idents_data (max_id, pool).await?;
 
-
-    // create and fill data object data 
-
-
-    // TO DO! 
-    
-    
     Ok(())
 
-}
-
-
-
-async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResult, AppError> {
-    
-    sqlx::raw_sql(&sql).execute(pool)
-        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))
 }
 
 
@@ -138,6 +145,20 @@ fn drop_columns_b_sql <'a>() -> &'a str {
     DROP COLUMN if exists source,
     DROP COLUMN if exists source_class,
     DROP COLUMN if exists fdaaa801_violation,
-    DROP COLUMN if exists baseline_type_units_analyzed;
-    SET client_min_messages TO NOTICE;"#
+    DROP COLUMN if exists baseline_type_units_analyzed;"#
+}
+
+fn set_messages_to_notice <'a>() -> &'a str {
+    "SET client_min_messages TO NOTICE;"
+}
+
+async fn get_max_nct_id(pool: &Pool<Postgres>) -> Result<u64, AppError> {  
+
+    let sql= "select max(nct_id) from ctgov.studies";
+	let res: String = sqlx::query_scalar(sql).fetch_one(pool)
+		.await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
+    let res_as_string = &res[3..].to_string();
+    let max_id: u64 = res_as_string.parse()
+			.map_err(|e| AppError::ParseError(e))?;
+    Ok(max_id)
 }
