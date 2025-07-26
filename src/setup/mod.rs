@@ -31,8 +31,6 @@ pub fn get_params(cli_pars: CliPars, config_string: &String) -> Result<InitParam
     
     let config_file: Config = config_reader::populate_config_vars(&config_string)?; 
 
-    //let data_date = config_file.data_details.data_date;  
-
     // If data date given in CL args the CL version takes precedence, 
     // else use the config file. Whatever the source Data date must also 
     // be a valid date. If not end the program with error message.

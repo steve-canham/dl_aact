@@ -14,7 +14,7 @@ use log::info;
 
 pub async fn do_mdr_import(_data_date: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
-    // Simplify the aact tables after initial restore of posthres.dmp file
+    // Simplify the aact tables after initial restore of postgres.dmp file
     
     // Remove tables not required (mostly from results details section).
     // Then clarify the very big studies table by dropping unused fields

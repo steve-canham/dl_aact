@@ -92,29 +92,29 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
 
     let chunk_size = 2000000;
 
-    // insert the nct ids themselves 
+    // Insert the nct ids themselves.
     
     let sql = r#"insert into ad.study_identifiers (sd_sid, identifier_value, identifier_type_id, source_id, source, identifier_date)
-                             select nct_id, nct_id, 11, 100120, 'clinicaltrials.gov', study_first_posted_date from ctgov.studies c "#;
+                             select nct_id, nct_id, 120, 100133, 'National Library of Medicine', study_first_posted_date from ctgov.studies c "#;
 
     utils::execute_phased_transfer(sql, max_id, chunk_size, " where ", "nct ids added as identifiers", pool).await?;
 
-    // insert the old 'alias' ids that were initially used for 3285 studies
+    // Insert the old 'alias' ids that were initially used for 3285 studies.
 
     let sql = r#"insert into ad.study_identifiers (sd_sid, identifier_value, identifier_type_id, source_id, source)
-                             select nct_id, id_value, 44, 100120, 'clinicaltrials.gov' from ctgov.id_information c
+                             select nct_id, id_value, 180, 100133, 'National Library of Medicine' from ctgov.id_information c
                              where id_source = 'nct_alias' "#;
     utils::execute_phased_transfer(sql, max_id, chunk_size, " and ", "obsolete nct ids added as identifiers", pool).await?;
 
-    // insert ids with url links to /reporter.nih... as funder / grant ids (agency may vary) 
+    // Insert ids with url links to /reporter.nih... as funder / grant ids (agency may vary).
 
-    let sql = r#"insert into ad.study_identifiers (sd_sid, identifier_value, identifier_type_id, source_id, source)
-                             select nct_id, id_value, 13, null, id_type from ctgov.id_information c
+    let sql = r#"insert into ad.study_identifiers (sd_sid, identifier_value, identifier_type_id, source_id, source, identifier_link)
+                             select nct_id, id_value, 401, 100134, 'National Institutes of Health', id_link from ctgov.id_information c
                              where ((id_link is not null and id_link ilike '%reporter.nih%') 
                              or id_type = 'NIH') "#;
     utils::execute_phased_transfer(sql, max_id, chunk_size, " and ", "grant ids added as identifiers", pool).await?;
 
-    // insert the remaining id data into a temp table for further processing
+    // Insert the remaining id data into a temp table for further processing.
     
     let sql = r#"SET client_min_messages TO WARNING; 
 	drop table if exists ad.temp_idents;
@@ -123,7 +123,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
 		  sd_sid                 VARCHAR         NOT NULL
         , id_value               VARCHAR         NULL
         , id_source              VARCHAR         NULL
-        , id_type_id             VARCHAR         NULL
+        , id_type_id             INT             NULL
         , id_type                VARCHAR         NULL
         , id_type_desc           VARCHAR         NULL
         , source_id              INT             NULL
@@ -150,8 +150,8 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
    
     // Do some basic processing on the temp table values
     // First remove leading or trailing semi-colons
-    // then split entries on any internal semi-colons (as most of these ppear to be compound)
-    // replace the 'semi-colon' values with their split versions
+    // then split entries on any internal semi-colons (as most of these appear to be compound)
+    // replace the 'semi-colon' values with their split versions.
 
     remove_both_ldtr_char_from_ident(';', pool).await?;
 
@@ -167,14 +167,14 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} records with semi-colons split and deleted", res.rows_affected());
    
-    // Remove those records where the identifier is the same as trhe NCT id
+    // Remove those records where the identifier is the same as trhe NCT id.
 
     let sql = r#"delete from ad.temp_idents 
         where id_value = sd_sid"#;
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} records deleted where identifier = NCT Id", res.rows_affected());
 
-    // Remove single quotes from the beginning and end of identifiers
+    // Remove single quotes from the beginning and end of identifiers.
 
     let sql = r#"update ad.temp_idents
         set id_value = trim(BOTH '''' from id_value)
@@ -182,7 +182,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} single quote characters removed from start or end of lines", res.rows_affected());
 
-    // Tidy up the spurious characters to be found in the identifiers
+    // Tidy up the spurious characters to be found in the identifiers.
 
     remove_both_ldtr_char_from_ident('"', pool).await?;
     remove_both_ldtr_char_from_ident('#', pool).await?;
@@ -209,8 +209,13 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     replace_string_in_ident("[", " ", pool).await?;
     replace_string_in_ident("]", " ", pool).await?;
     replace_string_in_ident("--", "-", pool).await?;
+
+    // Seems to need to be done twice, albeit for a very small number of records.
+
     replace_string_in_ident("  ", " ", pool).await?;
-    replace_string_in_ident("  ", " ", pool).await?;
+    replace_string_in_ident("  ", " ", pool).await?;  
+
+    // Final trim.
 
     let sql = r#"update ad.temp_idents
         set id_value = trim(id_value);"#;
@@ -221,21 +226,29 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
 
     let sql = r#"delete from ad.temp_idents 
         where 
-        id_value in ('00-000', '00000', '000000', '0000000', 
-        '00000000', '000000000', '0000000000', '000000000000')
+        id_value in ('0', '00', '000', '0000', '00-000', '00000', '000000', '0000000', 
+        '00000000', '000000000', '0000000000', '000000000000', '0000-00000')
         or id_value ilike '%12345678%' 
         or id_value ilike '%87654321%';"#;
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} dummy identifiers, e.g. all 0s, or obvious sequences, removed", res.rows_affected());
 
-    // remove those with '@' - e.g. email addresses, odd formulations
+    // Remove those that are too small to be useful (unless type is given).
+
+    let sql = r#"delete from ad.temp_idents 
+        where length(id_value) < 3
+        and id_type_desc is not null"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} very short  identifiers (1 or 2 characters) removed", res.rows_affected());
+
+    // Remove those with '@' - e.g. email addresses, odd formulations
 
     let sql = r#"delete from ad.temp_idents 
         where id_value like '%@%';"#;
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} email addresses and other odd identifier values with '@' removed", res.rows_affected());
 
-    // remove identifiers that are study acronyms
+    // Remove identifiers that are study acronyms.
 
     let sql = r#"delete from ad.temp_idents i
         using ad.study_titles t
@@ -245,7 +258,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} identifiers removed as having the same value as the study acronym", res.rows_affected());
 
-    // remove identifiers that are study brief titles
+    // Remove identifiers that are study brief titles.
 
     let sql = r#"delete from ad.temp_idents i
         using ad.study_titles t
@@ -255,7 +268,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} identifiers removed as having the same value as a study title", res.rows_affected());
 
-    // remove identifiers that refer (mostly) to a person
+    // Remove identifiers that refer (mostly) to a person.
 
     let sql = r#"delete from ad.temp_idents i
             where id_value ilike '%dr.%'
@@ -267,7 +280,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} identifiers removed as referring to a person", res.rows_affected());
     
-    // Get rid of all remaining identifiers that are just letters, spaces, and periods.
+    // Get rid of all remaining identifiers that include only letters, spaces, and periods.
     // Though a few of these may be sponsor Ids the vast bulk are acronyms, the name of the 
     // sponsor or hospital, a short formn of the study name, or something undecipherable. 
     // They are not useful identifiers!  
@@ -280,7 +293,8 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     info!("{} identifiers consisting only of letters, spaces and periods removed", res.rows_affected());		
 
 
-    // Can now start matching against regular expresions representing trial registry formats
+    // Can now start matching against regular expresions representing trial registry formats.
+
     info!("");
 
     // EU CTR number
@@ -291,7 +305,6 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
         id_type_id = 123,
         source_id = 100159,
         source = 'European Medicines Agency'
-
         where id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}' 
         and (
         length(id_value) = 14
@@ -359,6 +372,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     info!("{} DRKS German identifiers found and labelled", res.rows_affected());	
     info!("");
 
+
     // ISRCTN
 
     replace_string_in_ident("ISRCTN : ", "ISRCTN", pool).await?;   // preliminary tidying (few recs)
@@ -379,29 +393,22 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     info!("{} ISRCTN UK identifiers found and labelled", res.rows_affected());	
     info!("");
 
+
     // CTRI
 
     replace_string_in_ident("CTRI No. ", "", pool).await?;  
 
     let sql = r#"update ad.temp_idents
-        set id_value = replace (substring(id_value from 'CTRI/20[0-9]{2}/[0-9]{2}/[0-9]{6}'), '/', '-'),
+        set id_value = replace (substring(id_value from 'CTRI/20[0-9]{2}/[0-9]{2,3}/[0-9]{6}'), '/', '-'),
         id_source = 'secondary_id',
         id_type_id = 121,
         source_id = 102044,
         source = 'Indian Council of Medical Research'
-        where id_value ~ 'CTRI/20[0-9]{2}/[0-9]{2}/[0-9]{6}'"#;
-    let res1 = utils::execute_sql(&sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = replace(substring(id_value from 'CTRI/20[0-9]{2}/[0-9]{3}/[0-9]{6}'), '/', '-'),
-        id_source = 'secondary_id',
-        id_type_id = 121,
-        source_id = 102044,
-        source = 'Indian Council of Medical Research'
-        where id_value ~ 'CTRI/20[0-9]{2}/[0-9]{3}/[0-9]{6}'"#;
-    let res2 = utils::execute_sql(&sql, pool).await?;
-    info!("{} CTRI Indian identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
+        where id_value ~ 'CTRI/20[0-9]{2}/[0-9]{2,3}/[0-9]{6}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} CTRI Indian identifiers found and labelled", res.rows_affected());	
     info!("");
+
 
     // ChiCTR
 
@@ -425,6 +432,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     info!("{} ChiCTR Chinese identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
     info!("");
 
+
     // KCT 
 
     let sql = r#"update ad.temp_idents
@@ -435,51 +443,323 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
         source = 'Korea Disease Control and Prevention Agency '
         where id_value ~ 'KCT[0-9]{7}'
         and id_value !~ 'MKKCT[0-9]{7}'"#;
-    let res1 = utils::execute_sql(&sql, pool).await?;
-    info!("{} KCT Korean identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} KCT Korean identifiers found and labelled", res.rows_affected());	
     info!("");
 
-
-    // JPRN
-
-
     
-
     // RBR
 
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'RBR-[0-9a-z]{6,8}'),
+        id_source = 'secondary_id',
+        id_type_id = 117,
+        source_id = 109251,
+        source = 'Instituto Oswaldo Cruz'
+        where id_value ~ 'RBR-[0-9a-z]{6,8}'"#;
+
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} RBR Brazilian identifiers found and labelled", res.rows_affected());	
+    info!("");
 
 
     // IRCT
 
+    replace_string_in_ident("IRCT2020-", "IRCT2020", pool).await?; 
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'IRCT[0-9]{11,14}N[0-9]{1,2}'),
+        id_source = 'secondary_id',
+        id_type_id = 125,
+        source_id = 0,
+        source = 'Iranian Ministry of Health and Medical Education'
+        where id_value ~ 'IRCT[0-9]{11,14}N[0-9]{1,2}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} IRCT Iranian identifiers found and labelled", res.rows_affected());	
+    info!("");
+
+
+    // JAPAN
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'JPRN-'||substring(id_value from 'C000[0-9]{6}'),
+        id_source = 'secondary_id',
+        id_type_id = 141,
+        source_id = 100156,
+        source = 'University Hospital Medical Information Network'
+        where id_value ~ '^C000[0-9]{6}'
+        or (id_value ~ 'C000[0-9]{6}' and id_value like '%UMIN%')"#;
+    let res1 = utils::execute_sql(&sql, pool).await?;
+
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'JPRN-'||substring(id_value from 'UMIN[0-9]{9}'),
+        id_source = 'secondary_id',
+        id_type_id = 141,
+        source_id = 100156,
+        source = 'University Hospital Medical Information Network'
+        where id_value ~ 'UMIN[0-9]{9}'"#;
+    let res2 = utils::execute_sql(&sql, pool).await?;
+
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'JPRN-'||substring(id_type_desc from 'UMIN[0-9]{9}'),
+        id_source = 'secondary_id',
+        id_type_id = 141,
+        source_id = 100156,
+        source = 'University Hospital Medical Information Network'
+        where id_type_desc ~ 'UMIN[0-9]{9}'"#;
+    let res3 = utils::execute_sql(&sql, pool).await?;
+
+    info!("{} UMIN japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected() + res3.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'JPRN-'||substring(id_value from 'jRCT[0-9]{10}'),
+        id_source = 'secondary_id',
+        id_type_id = 140,
+        source_id = 0,
+        source = 'Japan Registry of Clinical Trials'
+        where id_value ~ 'jRCT[0-9]{10}'"#;
+    let res1 = utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'JPRN-'||substring(id_value from 'jRCTs[0-9]{9}'),
+        id_source = 'secondary_id',
+        id_type_id = 140,
+        source_id = 0,
+        source = 'Japan Registry of Clinical Trials'
+        where id_value ~ 'jRCTs[0-9]{9}'"#;
+    let res2 = utils::execute_sql(&sql, pool).await?;
+
+    info!("{} jCRT japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+    set id_value = id_value||'-'||id_type_desc
+    where id_value = 'JAPIC-CTI'"#;
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+    set id_value = replace(id_value, 'JAPIC', 'Japic')
+    where id_value like '%JAPIC%'"#;
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+    set id_value = replace(id_value, 'JapicCTI- ', 'JapicCTI-')
+    where id_value like '%JapicCTI- %'"#;
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'JapicCTI\-[0-9]{6}'),
+        id_source = 'secondary_id',
+        id_type_id = 139,
+        source_id = 100157,
+        source = 'Japan Pharmaceutical Information Center'
+        where id_value ~ 'JapicCTI\-[0-9]{6}'"#;
+    let res1 = utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'JapicCTI\-R[0-9]{6}'),
+        id_source = 'secondary_id',
+        id_type_id = 139,
+        source_id = 100157,
+        source = 'Japan Pharmaceutical Information Center'
+        where id_value ~ 'JapicCTI\-R[0-9]{6}'"#;
+    let res2 = utils::execute_sql(&sql, pool).await?;
+
+    info!("{} JAPIC japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'JMA-IIA[0-9]{5}'),
+        id_source = 'secondary_id',
+        id_type_id = 138,
+        source_id = 100158,
+        source = 'Japan Medical Association Center for Clinical Trials'
+        where id_value ~ 'JMA-IIA[0-9]{5}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+
+    info!("{} JMA japanese identifiers found and labelled", res.rows_affected());	
 
     
+    info!("");
 
-/*
+    
+    // PACTR
+    
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'PACTR[0-9]{15,16}'),
+        id_source = 'secondary_id',
+        id_type_id = 128,
+        source_id = 0,
+        source = 'Cochrane South Africa'
+        where id_value ~ 'PACTR[0-9]{15,16}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} PACTR Pan African identifiers found and labelled", res.rows_affected());	
+    info!("");
 
-select * from ad.temp_idents
-where id_value ~ 'RBR-[0-9a-z]{6}'
-or id_value ~ 'RBR-[0-9a-z]{7}'
-or id_value ~ 'RBR-[0-9a-z]{8}'
+
+    // PERU
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'PER-[0-9]{3}-[0-9]{2}'),
+        id_source = 'secondary_id',
+        id_type_id = 129,
+        source_id = 0,
+        source = 'National Institute of Health, Peru'
+        where id_value ~ '^PER-[0-9]{3}-[0-9]{2}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} PER Peruvian identifiers found and labelled", res.rows_affected());	
+    info!("");
 
 
-'IRCT[0-9]{11,14}N[0-9]{1,2}'
-remove hyphens first
-(start with IRCT)
+    // CUBA
 
-JPRN-C[0-9]{9}, JPRN-jRCT[0-9]{9},
-JPRN-UMIN[0-9]{9}
-Don't appear to be any!
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'RPCEC[0-9]{8}'),
+        id_source = 'secondary_id',
+        id_type_id = 122,
+        source_id = 0,
+        source = 'The National Coordinating Center of Clinical Trials, Cuba'
+        where id_value ~ 'RPCEC[0-9]{8}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} RPCEC Cuban identifiers found and labelled", res.rows_affected());	
+    info!("");
 
-'PACTR[0-9]{15,16}'
 
-select * from ad.temp_idents
-where id_value ~ 'C[0-9]{9}'
-order by id_value
--- and jrct
--- and umin
+    // SRi-LANKA
 
-*/
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(substring(id_value from 'SLCTR/20[0-9]{2}/[0-9]{3}'),  '/', '-'),
+        id_source = 'secondary_id',
+        id_type_id = 130,
+        source_id = 0,
+        source = 'Sri Lanka Medical Association'
+        where id_value ~ 'SLCTR/20[0-9]{2}/[0-9]{3}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} SLCTR Sri Lankan identifiers found and labelled", res.rows_affected());	
+    info!("");
 
+
+    // THAI
+
+    // TCTR20[0-9]{9}
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'TCTR20[0-9]{9}'),
+        id_source = 'secondary_id',
+        id_type_id = 131,
+        source_id = 0,
+        source = 'Central Research Ethics Committee, Thailand'
+        where id_value ~ 'TCTR20[0-9]{9}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} TCTR Thai identifiers found and labelled", res.rows_affected());	
+    info!("");
+
+    // DUTCH
+
+    let sql = r#"update ad.temp_idents
+    set id_value = replace(id_value, ' ', '')
+    where id_value ~ '^NTR [0-9]{1,4}'
+    and id_source = 'secondary_id'"#;
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+    set id_value = replace(id_value, '-', '')
+    where id_value ~ '^NTR\-[0-9]{1,4}'
+    and id_source = 'secondary_id'"#;
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'NTR[0-9]{1,4}'),
+        id_source = 'secondary_id',
+        id_type_id = 132,
+        source_id = 0,
+        source = 'Centrale Commissie Mensgebonden Onderzoek'
+        where id_value ~ '^NTR[0-9]{1,4}'
+        and id_source = 'secondary_id'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} NTR Dutch identifiers found and labelled", res.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'NL-OMON[0-9]{1,5}'),
+        id_source = 'secondary_id',
+        id_type_id = 132,
+        source_id = 0,
+        source = 'Centrale Commissie Mensgebonden Onderzoek'
+        where id_value ~ 'NL-OMON[0-9]{1,5}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} NL-OMON Dutch identifiers found and labelled", res.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'NL[0-9]{4}'),
+        id_source = 'secondary_id',
+        id_type_id = 132,
+        source_id = 0,
+        source = 'Centrale Commissie Mensgebonden Onderzoek'
+        where id_value ~ '^NL[0-9]{4}'
+        and length(id_value) < 7
+        and id_source = 'secondary_id'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} NL Dutch identifiers found and labelled", res.rows_affected());	
+    info!("");
+
+
+    // LEBANESE
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'LBCTR20[0-9]{8}'),
+        id_source = 'secondary_id',
+        id_type_id = 133,
+        source_id = 0,
+        source = 'Lebanese Ministry of Public Health'
+        where id_value ~ 'LBCTR20[0-9]{8}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} LBCTR Lebanese identifiers found and labelled", res.rows_affected());	
+    info!("");
+
+    // ITMC 
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'ITMCTR[0-9]{10}'),
+        id_source = 'secondary_id',
+        id_type_id = 133,
+        source_id = 0,
+        source = 'Lebanese Ministry of Public Health'
+        where id_value ~ 'ITMCTR[0-9]{10}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} ITMCTR Trad Medicine identifiers found and labelled", res.rows_affected());	
+    info!("");
+
+
+    // Hong Kong
+    
+    let sql = r#"update ad.temp_idents
+    set id_value = replace(id_value, ' ', '')
+    where id_value ilike '%HKUCTR%'"#;
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = substring(id_value from 'HKUCTR-[0-9]{1,4}'),
+        id_source = 'secondary_id',
+        id_type_id = 156,
+        source_id = 0,
+        source = 'The University of Hong Kong'
+        where id_value ~ 'HKUCTR-[0-9]{1,4}'"#;
+    let res = utils::execute_sql(&sql, pool).await?;
+    info!("{} HKUCTR Hong Kong identifiers found and labelled", res.rows_affected());	
+    info!("");
+
+
+   // Insert secondary ids found above
+
+    let sql = r#"insert into ad.study_identifiers (sd_sid, identifier_value, identifier_type_id, source_id, source)
+                             select sd_sid, id_value, id_type_id, source_id, source
+                             from ad.temp_idents 
+                             where id_type_id is not null "#;   
+    utils::execute_sql(&sql, pool).await?;
+
+    let sql = r#"delete from ad.temp_idents 
+                             where id_type_id is not null "#;   
+    utils::execute_sql(&sql, pool).await?;
 
     let _sql = r#"drop table if exists ad.temp_idents;"#;
     //utils::execute_sql(sql, pool).await?;

@@ -19,6 +19,7 @@ pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sq
         let end_num = start_num + chunk_size;
         let chunk_sql = format!("c.nct_id >= 'NCT{:0>8}' and c.nct_id < 'NCT{:0>8}';", start_num, end_num);
         let chsql = sql.to_string() + sql_linker + &chunk_sql;
+        
         let res = sqlx::raw_sql(&chsql).execute(pool)
             .await.map_err(|e| AppError::SqlxError(e, chsql.to_string()))?;
         let recs = res.rows_affected();
@@ -34,7 +35,7 @@ pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sq
     Ok(rec_num)
 }
 
-
+/* 
 pub async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fback: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
 
     let mut total_recs = 0;
@@ -46,6 +47,7 @@ pub async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fba
         if end_num > rec_num + 1000001 {
             end_num = rec_num + 1000000;
         }
+
         let chunk_sql = format!("s.id >= {} and s.id <= {};", start_num, end_num);
         let chsql = sql.to_string() + " and " + &chunk_sql;
         let res = sqlx::raw_sql(&chsql).execute(pool)
@@ -59,7 +61,7 @@ pub async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fba
 
     Ok(())
 }
-
+*/
 
 pub async fn vacuum_table (table: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
     

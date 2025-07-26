@@ -15,7 +15,7 @@ From the CTII web site: "AACT is a publicly available relational database that c
 <li>A database called aact should be created on a Postgres cluster, if not already present.</li>
 <li>The AACT database then needs to be restored using a pg_restore command, with the entire database appearing as the ctgov schema within the aact DB. Details on the restore command are available in one of the docs files in this repo.</li>
 <li>**Once the restore is completed** simply run the program. It largely consists of a long series of SQL statements that are fired at the AACT database, to extract the data in to an MDR compliant form. 
-<li>The result is an  MDR 'ad' version of the CTG data, in a schema called 'ad' in the aact database. From there the data can be transferred to another database (e.g. ctg) using FTW mechanisms.</li> 
+<li>The result is an MDR 'ad' version of the CTG data, in a schema called 'ad' in the aact database. From there the data can be transferred to another database (e.g. ctg) using FTW mechanisms.</li> 
 <li>By default this data is not fully coded, e.g. ROR organisation codes have not yet been applied. The coding phase of the CTG pipeline therefore still needs to be applied to the data. Some coding may be available, and switched on using a CLI flag (this needs to be developed).</li>  
 <li>At the end of the process a summary version of the study data is transferred to the who db, so that it can summarised along with data from other registries (needs to be developed and the dl_who process amended accordingly).</li>  
 </ul>
