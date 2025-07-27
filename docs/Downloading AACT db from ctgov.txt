@@ -51,11 +51,9 @@ In both cases
  <full file path> to postgres.dmp file
  
  
-  *** subsequent use, replace existing database
+ *** subsequent use, replace existing database
 
-Despite using 
-  
-Despite the 'clean' flag in the command below, any existing ctgov schema in the aact db must first be deleted., or the command below exits with an error about the schema already existing.
+Despite using the 'clean' flag in the command below, any existing ctgov schema in the aact db must first be deleted, or the command below exits with an error about the schema already existing.
   
  pg_restore -h localhost -U postgres -p 5433  -e -v -O -x -d aact --clean --no-owner "E:\MDR source data\CTG Dumps\20250318\postgres.dmp"
  
@@ -63,3 +61,5 @@ where
 -clean: Before restoring database objects, issue commands to DROP all the objects that will be restored. 
 This option is useful for overwriting an existing database. If any of the objects do not exist in the destination database, 
 ignorable error messages will be reported, unless --if-exists is also specified.
+
+pg_restore -e -v -O -x -d aact --no-owner -U steve '/home/steve/Data/MDR source data/CTGDumps/20250727/postgres.dmp'

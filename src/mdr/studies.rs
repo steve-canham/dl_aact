@@ -395,5 +395,4 @@ fn max_date_sql (data_date: &str) -> String {
 	set dt_of_data = '{}'
 	where id > 1 "#, data_date)
 }
-
 */
