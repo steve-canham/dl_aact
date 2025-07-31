@@ -61,7 +61,7 @@ pub async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fba
 
     Ok(())
 }
- */
+
 
 pub async fn vacuum_table (table: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
@@ -82,3 +82,4 @@ pub async fn vacuum_table (table: &str, pool: &Pool<Postgres>) -> Result<(), App
 
     Ok(())
 }
+ */

@@ -108,12 +108,17 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     // Using the temp_idents table, tidy up the identifier
     // text and remove duplicates and obvious non identifiers
     
+    split_doubled_values(pool).await?;
     tidy_identifier_text(pool).await?;
     remove_obvious_non_identifiers(pool).await?;   // Doing this first simplifies the step below
     make_identifier_prefixes_more_consistent(pool).await?;
     make_identifier_text_more_consistent(pool).await?;
     remove_duplicate_identifiers(pool).await?;  // The data source contains about 11000 duplicated identifiers
 
+    code_very_short_unidentifiable_ids(pool).await?; 
+    transfer_coded_identifiers(pool).await?;
+
+    /* 
     // identify old NCT aliases and NIH and other us agency identifiers
 
     find_nct_aliases(pool).await?;
@@ -146,7 +151,7 @@ pub async fn load_idents_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     //utils::execute_sql(sql, pool).await?;
 
     utils::vacuum_table("study_identifiers", pool).await?;
-
+*/
     Ok(())
 
 }
@@ -185,13 +190,81 @@ async fn create_copy_of_identifiers(max_id: u64, chunk_size: u64, pool: &Pool<Po
 }
 
 
-async fn tidy_identifier_text(pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    // First remove leading or trailing semi-colons
-    // then split entries on any internal semi-colons (as most of these appear to be compound)
-    // replace the 'semi-colon' values with their split versions.
+async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    // There seem to be about 720 doubled identifier records, with each
+    // pair split by a semi-colon. Not all records with semi-colons are doubles,
+    // and some doubled identifiers use a different delimiter, but the semi-colon seems
+    // to be a reasonable starting point.
+
+    // As an initial step, remove semi-colons from the start and end of identifiers.
 
     remove_both_ldtr_char_from_ident(';', pool).await?;
+
+    // First though, a small group of identifiers including '(V/v)ersion' or 'v' followed by a number have a semi-colon 
+    // before the date. In these case the semi-colon shopuld just be removed.
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, ';', '')
+        where (id_value ilike '%version%'
+        or id_value ~ 'v [0-9]' or id_value ~ '^v[0-9]'
+        or id_value ~ 'v.[0-9]')
+        and id_value ilike '%;%';"#;
+    utils::execute_sql(sql, pool).await?;
+
+    // There is a particular group of doubled identifiers that come from the 
+    // Clinical Trials Unit in Basel. In each case the first id is a Swiss
+    // BASEC (ethics system) number, and the second is an internal CTU
+    // identifier. These should be botrh split and identified.
+    
+    let sql = r#"insert into ad.temp_idents
+        (id, sd_sid, id_value, id_source, id_type, id_type_desc)
+        select id, sd_sid, trim(substring(id_value, position(';' in id_value) + 1)), id_source, id_type, 'Basel CTU ID'
+        from ad.temp_idents
+        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
+    utils::execute_sql(sql, pool).await?;
+
+    let sql = r#"insert into ad.temp_idents
+        (id, sd_sid, id_value, id_source, id_type, id_type_desc)
+        select id, sd_sid, trim(substring(id_value, 1, position(';' in id_value) - 1)), id_source, id_type, 'BASEC ID'
+        from ad.temp_idents
+        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
+    utils::execute_sql(sql, pool).await?;
+
+    let sql = r#"delete from ad.temp_idents
+        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
+    let res1 = utils::execute_sql(sql, pool).await?;
+
+    // There is a much smaller but similar group of paired records linked by a comma
+
+    let sql = r#"insert into ad.temp_idents
+        (id, sd_sid, id_value, id_source, id_type, id_type_desc)
+        select id, sd_sid, trim(substring(id_value, position(',' in id_value) + 1)), id_source, id_type, 'Basel CTU ID'
+        from ad.temp_idents
+        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
+    utils::execute_sql(sql, pool).await?;
+
+    let sql = r#"insert into ad.temp_idents
+        (id, sd_sid, id_value, id_source, id_type, id_type_desc)
+        select id, sd_sid, trim(substring(id_value, 1, position(',' in id_value) - 1)), id_source, id_type, 'BASEC ID'
+        from ad.temp_idents
+        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
+    utils::execute_sql(sql, pool).await?;
+
+    let sql = r#"delete from ad.temp_idents
+        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
+    let res2 = utils::execute_sql(sql, pool).await?;
+
+    info!("{} Basel CTU records with semi-colons or commas split", res1.rows_affected() + res2.rows_affected());
+
+    // The remaining semi-colon containing identifiers can then be split and added
+    // to the table.
 
     let sql = r#"insert into ad.temp_idents (id, sd_sid, id_value, id_source, id_type, id_type_desc)
         select id, sd_sid, trim(unnest(string_to_array(id_value, ';'))) as new_value, 
@@ -203,8 +276,15 @@ async fn tidy_identifier_text(pool: &Pool<Postgres>) -> Result<(), AppError> {
     let sql = r#"delete from ad.temp_idents 
         where id_value ilike '%;%'"#;
     let res = utils::execute_sql(sql, pool).await?;
-    info!("{} records with semi-colons split and deleted", res.rows_affected());
-   
+    info!("{} remaining records with semi-colons split", res.rows_affected());
+
+    info!("");
+    Ok(())
+}
+
+
+async fn tidy_identifier_text(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+        
     // Remove single quotes from the beginning and end of identifiers.
 
     let sql = r#"update ad.temp_idents
@@ -216,10 +296,10 @@ async fn tidy_identifier_text(pool: &Pool<Postgres>) -> Result<(), AppError> {
     // Tidy up the spurious characters to be found in the identifiers.
 
     remove_both_ldtr_char_from_ident('"', pool).await?;
-    remove_both_ldtr_char_from_ident('#', pool).await?;
     remove_both_ldtr_char_from_ident('-', pool).await?;
     remove_both_ldtr_char_from_ident(',', pool).await?;
     remove_both_ldtr_char_from_ident('.', pool).await?;
+    remove_both_ldtr_char_from_ident('#', pool).await?;
 
     remove_leading_char_from_ident('!', pool).await?;
     remove_leading_char_from_ident('+', pool).await?;
@@ -324,14 +404,14 @@ async fn remove_obvious_non_identifiers(pool: &Pool<Postgres>) -> Result<(), App
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} identifiers removed as referring to a person", res.rows_affected());
     
-    // Some records have a digit in the id_type_desc field and only text (inc. spaces, periods)
+    // Some records have a digit in the id_type_desc field and only text (inc. spaces and punctuation)
     // in the id_value field. These are generally where the data in the two fields have been inverted
     // on data entry. These need to be swapped back.
 
     let sql = r#"update ad.temp_idents
         set id_value = id_type_desc,
         id_type_desc = id_value
-        where id_value ~ '^[A-Za-z\s\.&,_/-]+$'
+        where id_value ~ '^[A-Za-z\s\.&,_/#-]+$'
         and id_type_desc ~ '[0-9]'"#;
     let res = utils::execute_sql(&sql, pool).await?;
     info!("{} identifiers and identifier descriptions reversed", res.rows_affected());
@@ -346,9 +426,9 @@ async fn remove_obvious_non_identifiers(pool: &Pool<Postgres>) -> Result<(), App
 
     // Get rid of all remaining identifiers that include only letters, spaces, and punctuation other than hyphens.
     // Though a few of these may be sponsor Ids the vast bulk are acronyms, the name of the 
-    // sponsor or hospital, a short formn of the study name, or something undecipherable. 
+    // sponsor or hospital, a short form of the study name, or something undecipherable. 
     // They are not useful identifiers!  
-    // Similar terms that include hyphens are retained as a much higher percentage of these
+    // Similar terms that include hyphens are retained as a higher percentage of these
     // are possible sponsor ids.
     
     let sql = r#"delete from ad.temp_idents
@@ -376,7 +456,7 @@ async fn remove_obvious_non_identifiers(pool: &Pool<Postgres>) -> Result<(), App
             and id_value !~ '^AGO'
             and id_value !~ '^WUCC'"#;
     let res = utils::execute_sql(&sql, pool).await?;
-    info!("{} id types removed when they are simply the trial name", res.rows_affected());		
+    info!("{} id types removed when they are simply the trial name followed by ' trial'", res.rows_affected());		
     info!("");
 
 
@@ -411,6 +491,7 @@ async fn make_identifier_prefixes_more_consistent(pool: &Pool<Postgres>) -> Resu
     replace_string_in_ident("Grant Agreement", "grant number ", pool).await?;
     replace_string_in_ident("Grant N.", "grant number ", pool).await?;
     replace_string_in_ident("Grant:", "grant ", pool).await?;
+    replace_string_in_ident("Grant ID", "grant ", pool).await?;
     replace_string_in_ident("Grant-", "grant ", pool).await?;
     replace_string_in_ident("Grant ", "grant ", pool).await?;
     replace_string_in_ident("GRANT", "grant ", pool).await?;
@@ -486,9 +567,20 @@ async fn make_identifier_prefixes_more_consistent(pool: &Pool<Postgres>) -> Resu
 
     replace_string_in_ident("#:", " number ", pool).await?;
     replace_string_in_ident("# :", " number ", pool).await?;
-    replace_string_in_ident("#", " number ", pool).await?;
-    info!("");   
-    
+   
+    // Almost all #s can be replaced by a 'number' unless that generates 
+    // a split in a number, hi.e. hashes immediately preceded and followed by [0-9] 
+    // can cause problems (there are 40-50 examples). It is not clear in these 
+    // cases what the # signifies.
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, '#', ' number ')
+        where id_value like '%#%'
+        and id_value !~ '[0-9]#[0-9]';"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} '#'s not embedded in digits replaced with 'number'", res.rows_affected());
+    info!("");
+     
     replace_string_in_ident("Reference Number", "number ", pool).await?;
     replace_string_in_ident("Reference number", "number ", pool).await?;
     replace_string_in_ident("reference number", "number ", pool).await?;
@@ -535,7 +627,7 @@ async fn make_identifier_prefixes_more_consistent(pool: &Pool<Postgres>) -> Resu
     replace_string_in_ident("number Number", " number ", pool).await?;
     replace_string_in_ident("number NUMBER", " number ", pool).await?;
 
-    // Need to repeat...
+    // Need to repeat this...
 
     replace_string_in_ident("  ", " ", pool).await?;
     replace_string_in_ident("  ", " ", pool).await?;
@@ -547,7 +639,6 @@ async fn make_identifier_prefixes_more_consistent(pool: &Pool<Postgres>) -> Resu
         link = null
         where source= 'foo'"#;
     utils::execute_sql(sql, pool).await?;
-
 
     // Final trim.
 
@@ -562,7 +653,7 @@ async fn make_identifier_prefixes_more_consistent(pool: &Pool<Postgres>) -> Resu
 
 async fn make_identifier_text_more_consistent(pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
-    // Remove spurious prefixing 'number '
+    // Remove spurious 'number 's that simply prefix an identifier
 
     let sql = r#"update ad.temp_idents
         set id_value = replace(id_value, 'number ', '')
@@ -570,6 +661,9 @@ async fn make_identifier_text_more_consistent(pool: &Pool<Postgres>) -> Result<(
     let res = utils::execute_sql(sql, pool).await?;
     info!("{} Initial 'number's removed", res.rows_affected());
     
+    // Create a table with the 'XXX type number' description, and the identifiers themselves, 
+    // in separate fields, using those entries that now contain 'number' but which do not have
+    // 'number' as the final word.
 
     let sql = r#"SET client_min_messages TO WARNING; 
             drop table if exists ad.temp_split_numbers;
@@ -579,10 +673,13 @@ async fn make_identifier_text_more_consistent(pool: &Pool<Postgres>) -> Result<(
             trim(substring(id_value, POSITION('number' in id_value) + 6)) as new_value
             from ad.temp_idents
             where id_value like '%number%'
+            and id_value not like '%number'
             and id_value !~ '^[0-9]'
             and id_value !~ '^A[0-9]'
             order by id_value;"#;
     utils::execute_sql(sql, pool).await?;
+
+    // Use that split_numbers table to update the temp_idents table.
 
     let sql = r#"update ad.temp_idents a
             set id_type_desc = case 
@@ -600,9 +697,85 @@ async fn make_identifier_text_more_consistent(pool: &Pool<Postgres>) -> Result<(
     let res = utils::execute_sql(sql, pool).await?;
     info!("{} Identifier types transferred to id description from value", res.rows_affected());
 
+    // Need to deal with those id values that end with 'number' - no easy way
+    // but can simplify a little by first assuring they are all lower case.
+
+    let sql: &'static str = r#"update ad.temp_idents
+        set id_value = replace(id_value, 'Number', 'number')
+        where id_value ~ 'Number$'"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} Final 'Number's changed to lower case", res.rows_affected());
+
+
+    switch_number_suffix_to_desc("UPenn IRB Protocol number", pool).await?;
+    switch_number_suffix_to_desc("UPittsburgh IRB number", pool).await?;
+    switch_number_suffix_to_desc("NIH grant number", pool).await?;
+    switch_number_suffix_to_desc("Contract number", pool).await?;
+    switch_number_suffix_to_desc("IDRCB number", pool).await?;
+    switch_number_suffix_to_desc("UCSD number", pool).await?;
+    switch_number_suffix_to_desc("REC number", pool).await?;
+    switch_number_suffix_to_desc("REK number", pool).await?;
+    switch_number_suffix_to_desc("Station number", pool).await?;
+    switch_number_suffix_to_desc("EUDRACT number", pool).await?;
+    switch_number_suffix_to_desc("EU CT number", pool).await?;
+    switch_number_suffix_to_desc("EudraCT-number", pool).await?;
+    switch_number_suffix_to_desc("EudraCT number", pool).await?;
+    switch_number_suffix_to_desc("Eudra CT number", pool).await?;
+    switch_number_suffix_to_desc("Scripps SOPRS number", pool).await?;
+    switch_number_suffix_to_desc("Study number", pool).await?;
+    switch_number_suffix_to_desc("Logan IRB number", pool).await?;
+    switch_number_suffix_to_desc("Award number", pool).await?;
+    switch_number_suffix_to_desc("Sponsor number", pool).await?;
+    switch_number_suffix_to_desc("Institution number", pool).await?;
+    switch_number_suffix_to_desc("VA IRB number", pool).await?;
+    switch_number_suffix_to_desc("Chilean number", pool).await?;
+    switch_number_suffix_to_desc("Clinical Trial number", pool).await?;
+    switch_number_suffix_to_desc("IMI WP8A number", pool).await?;
+    switch_number_suffix_to_desc("UCSF RAS number", pool).await?;
+    switch_number_suffix_to_desc("no UCI HS number", pool).await?;
+    switch_number_suffix_to_desc("UHN REB number", pool).await?;
+    switch_number_suffix_to_desc("CR number", pool).await?;
+    switch_number_suffix_to_desc("IRB number", pool).await?;
+    switch_number_suffix_to_desc("Hospice number", pool).await?;
+    switch_number_suffix_to_desc("Protocol number", pool).await?;
+    switch_number_suffix_to_desc("protocol number", pool).await?;
+    switch_number_suffix_to_desc("grant number", pool).await?;
+
+    switch_number_suffix_to_desc("MBW-number", pool).await?;
+    switch_number_suffix_to_desc("NIAID CRMS ID number", pool).await?;
+    switch_number_suffix_to_desc("DDX exemption from MRHA number", pool).await?;
+    switch_number_suffix_to_desc("number", pool).await?;
+    
+    // the last two are odd in that they have an empty Version number suffix, which can be removed
+
+    let sql: &'static str = r#"update ad.temp_idents
+        set id_value = replace(id_value, ', Version', '')
+        where id_value ~ ', Version$'"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} Empty version numbers removed", res.rows_affected());
+
+    // Repeat removal of spurious 'number 's that simply prefix an identifier
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, 'number ', '')
+        where id_value ~ '^number ';"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} Initial 'number's removed", res.rows_affected());
+   
+    // Remove a few additional records that now don't have values (or meaningful values).
+
+    let sql = r#"delete from ad.temp_idents i
+        where id_value is null
+        or id_value = ''
+        or id_value ~ '^[0-]+$';"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} Additional empty or meaningless identifier records removed", res.rows_affected());
+    
     // clean up beginnings
+
     remove_leading_char_from_ident('.', pool).await?;
     remove_leading_char_from_ident(':', pool).await?;
+    
 
     // Final trim.
 
@@ -680,7 +853,51 @@ async fn remove_duplicate_identifiers(pool: &Pool<Postgres>) -> Result<(), AppEr
     Ok(())
 }
 
-// get riud of unclasifiable here
+
+async fn code_very_short_unidentifiable_ids(pool: &Pool<Postgres>) -> Result<(), AppError> { 
+
+    // There are many small identifiers, that if given without any further information,
+    // are impossible to characterise as they could have a wide variety of sources.
+    // These are categorised as 'unknown' so that can thwm be removed from the temp_idents table,
+    // though they ae transferred to study_identifiers. This is just to make later
+    // development and processing easier and quicker.
+   
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 990,
+        source_id = null,
+        source = null
+        where id_value ~ '^[0-9]+$'
+        and length (id_value) < 7
+        and id_type_desc is null"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} IDs with just numbers (length < 7) labelled", res.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 990,
+        source_id = null,
+        source = null
+        where id_value ~ '^[0-9\-]+$'
+        and id_value !~ '^[0-9]+$'
+        and length (id_value) < 6
+         and id_type_desc is null"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} IDs with just numbers and hyphens (length < 6) labelled", res.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+    
+        set id_type_id = 990,
+        source_id = null,
+        source = null
+        where id_value ~ '^[A-Za-z0-9\-]+$'
+        and id_value !~ '^[0-9\-]+$'
+        and length (id_value) < 5
+        and id_type_desc is null"#;
+    let res = utils::execute_sql(sql, pool).await?;
+    info!("{} IDs with with length < 5 labelled", res.rows_affected());	
+
+    info!("");
+    Ok(())
+}
 
 async fn find_nct_aliases(pool: &Pool<Postgres>) -> Result<(), AppError> { 
 
@@ -778,8 +995,10 @@ async fn find_us_cdc_identifiers(pool: &Pool<Postgres>) -> Result<(), AppError> 
         id_type_id = 406,
         source_id = 100245,
         source = 'Centers for Disease Control and Prevention'
-        where ((id_type_desc ~ 'Centers for Disease Control' and id_type_desc not ilike '%Taiwan%')
-            or id_type_desc in ('CDC', 'CDC, USA')
+        where (id_type_desc in ('CDC', 'CDC, USA', 'CDC grant number')
+            or (id_type_desc ~ 'Centers for Disease Control' and id_type_desc not ilike '%Taiwan%')
+            or id_type_desc ilike 'Center for Disease Control%'
+            or id_type_desc ilike 'CDC Cooperative Agreement%'
             or id_value ilike 'CDC-G%'
             or id_value ilike 'CDC-N%'
             or id_value ilike 'CDC-O%'
@@ -794,7 +1013,8 @@ async fn find_us_cdc_identifiers(pool: &Pool<Postgres>) -> Result<(), AppError> 
         source_id = 100245,
         source = 'Centers for Disease Control and Prevention'
         where ((id_type_desc ~ 'Centers for Disease Control' and id_type_desc not ilike '%Taiwan%')
-            or id_type_desc in ('CDC', 'CDC, USA')
+            or id_type_desc in ('CDC', 'CDC, USA', 'CDC number', 'CDC Protocol number',
+            'CDC, USA, CDC IRB Protocol number')
             or id_value ilike 'CDC-G%'
             or id_value ilike 'CDC-N%'
             or id_value ilike 'CDC-O%'
@@ -807,7 +1027,7 @@ async fn find_us_cdc_identifiers(pool: &Pool<Postgres>) -> Result<(), AppError> 
     Ok(())
 }
 
-
+/*
 async fn find_nih_grant_identifiers(pool: &Pool<Postgres>) -> Result<(), AppError> { 
 
     let sql = r#"update ad.temp_idents
@@ -824,7 +1044,8 @@ async fn find_nih_grant_identifiers(pool: &Pool<Postgres>) -> Result<(), AppErro
         id_type_id = 401,
         source_id = 100134,
         source = 'National Institutes of Health'
-        where id_type_desc in ('Federal Funding, NIH', 'NIH Contract', 'NIH Contract Number', 'US NIH Contract Number')
+        where id_type_desc in ('Federal Funding, NIH', 'NIH Contract', 'NIH Contract Number', 'US NIH Contract Number',
+        'NIH grant number', 'NIH contract')
         or id_type_desc ilike 'US NIH Grant%'
         or id_type_desc ilike 'U.S. NIH Grant%'
         or (id_type = 'OTHER_GRANT' 
@@ -1099,12 +1320,6 @@ async fn find_japanese_registry_identities(pool: &Pool<Postgres>) -> Result<(), 
 
     info!("{} jCRT japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
 
-    let sql = r#"update ad.temp_idents
-    set id_value = 'JapicCTI-'||id_type_desc
-    where id_value = 'JAPIC-CTI'"#;
-    let res = utils::execute_sql(sql, pool).await?;
-    info!("{} JAPIC identifiers recombined", res.rows_affected());
-
     replace_string_in_ident("JAPIC", "Japic", pool).await?; 
     replace_string_in_ident("JapicCTI- ", "JapicCTI-", pool).await?; 
     replace_string_in_ident("Japic CTI-", "JapicCTI-", pool).await?; 
@@ -1227,8 +1442,6 @@ async fn find_other_asian_registry_identities(pool: &Pool<Postgres>) -> Result<(
 
     // CTRI
 
-    replace_string_in_ident("CTRI No. ", "", pool).await?;  
-
     let sql = r#"update ad.temp_idents
         set id_value = replace (substring(id_value from 'CTRI/20[0-9]{2}/[0-9]{2,3}/[0-9]{6}'), '/', '-'),
         id_source = 'registry_id',
@@ -1240,6 +1453,8 @@ async fn find_other_asian_registry_identities(pool: &Pool<Postgres>) -> Result<(
     info!("{} CTRI Indian identifiers found and labelled", res.rows_affected());	
 
     // SRi-LANKA
+
+    replace_string_in_ident("SLCTR/ ", "SLCTR/", pool).await?; 
 
     let sql = r#"update ad.temp_idents
         set id_value = replace(substring(id_value from 'SLCTR/20[0-9]{2}/[0-9]{3}'),  '/', '-'),
@@ -1499,7 +1714,7 @@ async fn find_other_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {
     Ok(())
 }
 
-
+*/
 async fn replace_string_in_ident(s1: &str, s2: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     let sql = format!(r#"update ad.temp_idents
@@ -1532,20 +1747,19 @@ async fn remove_both_ldtr_char_from_ident(s: char, pool: &Pool<Postgres>) -> Res
     Ok(())
 }
 
-/* 
-async fn switch_prefix_to_desc(s: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
+async fn switch_number_suffix_to_desc(s: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 let sql = format!(r#"update ad.temp_idents
             set id_type_desc = case 
                 when id_type_desc is null then '{s}'
                 else id_type_desc||', '||'{s}'
                 end,
             id_value = trim(replace (id_value, '{s}', ''))
-            where id_value ~ '{s}'"#);
+            where id_value ~ '{s}$'"#);
     let res = utils::execute_sql(&sql, pool).await?;
-    info!("{} '{}' moved from id_value to become part of id type description", res.rows_affected(), s);
+    info!("{} '{}' suffix(es) from id_value to id type description", res.rows_affected(), s);
     Ok(())
 }
-*/
+
 
 async fn transfer_coded_identifiers(pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
