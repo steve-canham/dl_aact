@@ -1,5 +1,9 @@
 mod studies;
+
 mod idents;
+mod idents_reg;
+mod idents_utils;
+
 mod locs;
 mod peoporgs;
 mod keywords;
@@ -30,6 +34,8 @@ pub async fn do_mdr_import(_data_date: &str, pool: &Pool<Postgres>) -> Result<()
     //studies::build_studies_table(pool).await?;
    
     //idents::build_titles_table(pool).await?;
+    let idents_processing = "reuse";
+
     idents::build_idents_table(pool).await?;
 
     locs::build_locations_table(pool).await?;
@@ -62,7 +68,7 @@ pub async fn do_mdr_import(_data_date: &str, pool: &Pool<Postgres>) -> Result<()
 
     //studies::load_studies_data(data_date, max_id, pool).await?;
     //idents::load_titles_data (max_id, pool).await?;
-    idents::load_idents_data (max_id, pool).await?;
+    idents::load_idents_data (idents_processing, max_id, pool).await?;
 
     Ok(())
 
