@@ -5,6 +5,38 @@ use crate::AppError;
 use log::info;
 
 
+pub async fn execute_sql_fb(sql: &str, pool: &Pool<Postgres>, 
+            s1: &str, s2: &str) -> Result<(), AppError> {
+    
+    let res = sqlx::raw_sql(&sql).execute(pool)
+        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
+
+    if res.rows_affected() > 1 {
+        info!("{} {} identifiers {}", res.rows_affected(), s1, s2);
+    }
+    else {
+        info!("{} {} identifier {}", res.rows_affected(), s1, s2);
+    }
+    
+    Ok(())
+}
+
+
+pub async fn execute_sql_sfb(sql: &str, pool: &Pool<Postgres>, s: &str) -> Result<(), AppError> {
+    
+    let res = sqlx::raw_sql(&sql).execute(pool)
+        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
+
+    if res.rows_affected() > 1 {
+        info!("{} identifiers {}", res.rows_affected(), s);
+    }
+    else {
+        info!("{} identifier {}", res.rows_affected(), s);
+    }
+    
+    Ok(())
+}
+
 pub async fn execute_temp_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sql_linker: &str, rec_type: &str, pool: &Pool<Postgres>) -> Result<u64, AppError> {
     
     let mut rec_num: u64 = 0;
@@ -37,19 +69,29 @@ pub async fn replace_string_in_ident(s1: &str, s2: &str, pool: &Pool<Postgres>) 
     let sql = format!(r#"update ad.temp_idents
         set id_value = replace(id_value, '{}', '{}')
         where id_value like '%{}%'"#, s1, s2, s1);
-    let res = utils::execute_sql(&sql, pool).await?;
-    info!("{} '{}' replaced by '{}' in identifiers", res.rows_affected(), s1, s2);
+    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    if res > 1 {
+        info!("{} '{}'s replaced by '{}' in identifiers", res, s1, s2);
+    }
+    else {
+        info!("{} '{}' replaced by '{}' in identifiers", res, s1, s2);
+    }
     Ok(())
 }
 
 
 pub async fn remove_leading_char_from_ident(s: char, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
-        let sql = format!(r#"update ad.temp_idents
+    let sql = format!(r#"update ad.temp_idents
         set id_value = trim(LEADING '{}' from id_value)
         where id_value like '{}%'"#, s, s);
-    let res = utils::execute_sql(&sql, pool).await?;
-    info!("{} '{}' characters removed from start of identifiers", res.rows_affected(), s);
+    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    if res > 1 {
+        info!("{} '{}' characters removed from start of identifiers", res, s);
+    }
+    else {
+        info!("{} '{}' character removed from start of identifiers", res, s);
+    }
     Ok(())
 }
 
@@ -59,8 +101,13 @@ pub async fn remove_both_ldtr_char_from_ident(s: char, pool: &Pool<Postgres>) ->
     let sql = format!(r#"update ad.temp_idents
         set id_value = trim(BOTH '{}' from id_value)
         where id_value like '%{}' or id_value like '{}%'"#, s, s, s);
-    let res = utils::execute_sql(&sql, pool).await?;
-    info!("{} '{}' characters removed from start or end of identifiers", res.rows_affected(), s);
+    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    if res > 1 {
+        info!("{} '{}' characters removed from start or end of identifiers", res, s);
+    }
+    else {
+        info!("{} '{}' character removed from start or end of identifiers", res, s);
+    }
     Ok(())
 }
 
@@ -73,8 +120,13 @@ let sql = format!(r#"update ad.temp_idents
                 end,
             id_value = trim(replace (id_value, '{s}', ''))
             where id_value ~ '{s}$'"#);
-    let res = utils::execute_sql(&sql, pool).await?;
-    info!("{} '{}' suffix(es) from id_value to id type description", res.rows_affected(), s);
+    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    if res > 1 {
+        info!("{} '{}' suffixes moved from id_value to id type description", res, s);
+    }
+    else {
+        info!("{} '{}' suffix moved from id_value to id type description", res, s);
+    }
     Ok(())
 }
 
@@ -89,8 +141,8 @@ pub async fn transfer_coded_identifiers(pool: &Pool<Postgres>) -> Result<(), App
 
     let sql = r#"delete from ad.temp_idents 
                              where id_type_id is not null "#;   
-    let res = utils::execute_sql(sql, pool).await?;
-    info!("{} identifiers characterised and transferred from temp_idents to study_identifiers table", res.rows_affected());
+    execute_sql_sfb(sql, pool, "transferred from temp_idents to study_identifiers table").await?;
+        
     info!("");
     Ok(())
 }

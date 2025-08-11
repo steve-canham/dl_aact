@@ -1,309 +1,15 @@
 
 use super::utils::{execute_sql};
-use super::idents_utils::{replace_string_in_ident};
+use super::idents_utils::{replace_string_in_ident, execute_sql_fb};
 
 use sqlx::{Pool, Postgres};
 use crate::AppError;
 use log::info;
 
-pub async fn find_eudract_registry_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'),
-        id_type_id = 123,
-        source_org_id = 100159,
-        source_org = 'European Medicines Agency'
-        where id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}' 
-        and (
-        length(id_value) = 14
-        or id_value ilike '%eu%'
-        or id_value ilike '%udract%'
-        or id_value ilike '%edract%')"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} EU CTR identifiers found and labelled", res.rows_affected());	
-
-    // A group of other records incoude EU-CTR IDs, in some cases along with other
-    // identifiers. The SQL below removes the other components into a small temporary 
-    // table, adding them to the temp_idents table before replacing the original 
-    // values with the EU-CTR IDs, and then encoding those.
-
-    let sql = r#"drop table if exists ad.temp_adds;
-        create table ad.temp_adds as 
-        select sd_sid, 
-        replace(id_value, substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'), '') as id_value,  
-        id_class, id_desc
-        from ad.temp_idents
-        where (id_value ~ '^20[0-9]{2}-0[0-9]{5}-[0-9]{2}'  
-        or (id_value ~ ' 20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^NL' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^UK' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^VIB' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^ISRCTN' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'))
-        and id_type_id is null
-        and id_value !~ '^SC'
-        and id_value !~ '^SF'
-        and replace(id_value, substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'), '') ~ '[1-9]'"#;
-    execute_sql(sql, pool).await?;
-    
-    let sql = r#"update ad.temp_adds set id_value = trim(id_value);
-        update ad.temp_adds set id_value = trim(BOTH '-' from id_value);
-        update ad.temp_adds set id_value = trim(BOTH '/' from id_value);
-        update ad.temp_adds set id_value = trim(BOTH ',' from id_value);
-        update ad.temp_adds set id_value = trim(BOTH '&' from id_value);
-        update ad.temp_adds set id_value = trim(id_value);
-        select * from ad.temp_adds;
-
-        insert into ad.temp_idents
-        (sd_sid, id_value, id_class, id_desc)
-        select sd_sid, id_value, id_class, id_desc
-        from ad.temp_adds"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')
-        where (id_value ~ '^20[0-9]{2}-0[0-9]{5}-[0-9]{2}'  
-        or (id_value ~ ' 20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^NL' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^UK' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^VIB' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}')  
-        or (id_value ~ '^ISRCTN' and id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'))
-        and id_type_id is null
-        and id_value !~ '^SC'
-        and id_value !~ '^SF'"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'),
-        id_type_id = 123,
-        source_org_id = 100159,
-        source_org = 'European Medicines Agency'
-        where id_value ~'20[0-9]{2}-0[0-9]{5}-[0-9]{2}' 
-        and (length(id_value) = 14)
-        and id_type_id is null"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} Additional EU CTR identifiers found and labelled", res.rows_affected());	
-
-    // A further small group are mis-formatted EUCTR numbers. Some of these can be turned
-    // into properly formatted IDs, and then sncoded. The rest are missing digits or have surplus
-    // digits and must be coded as mis-formed regiostry identifiers.
-    
-    // Reverse values in one record
-
-    let sql = r#"update ad.temp_idents  
-        set id_value = id_desc,
-        id_desc = id_value
-        where id_value = 'EudraCT 2009';"#;
-    execute_sql(sql, pool).await?;
-
-    // delete various 'empty' ids
-
-    let sql = r#"delete from ad.temp_idents
-        where id_value !~ '[0-9]'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;
-
-        delete from ad.temp_idents
-        where id_value = 'EudraCT: 2222 - 222222-22';
-
-        delete from ad.temp_idents
-        where id_value ~ '[0-9]-RCB/EUDRACT';"#;
-    execute_sql(sql, pool).await?;
-
-    // identify obvious mis-formed and uncorrectable ones
-
-    let sql = r#"update ad.temp_idents 
-        set id_type_id = 179,
-        id_type = 'Malformed registry Id',
-        source_org_id = 100159,
-        source_org = 'European Medicines Agency'
-        where id_value ilike '%eudr%'
-        and (id_value ~ '20[0-9]{2}-[0-9]{2,5}-[0-9]{2}'
-        or  id_value ~ '20[0-9]{2}-[0-9]{7}-[0-9]{2}'
-        or  id_value ~ '20[0-9]{2}-1[0-9]{5}-[0-9]{2}'
-        or id_value ~ '20[0-9]{2}-[0-9]{6}$'
-        or id_value ~ '20[0-9]{2}-[0-9]{6}-[0-9]$'
-        or id_value ~ '20[0-9]{2}-[0-9]{6}-[0-9][A-Z]'
-        or id_value ~ 'EudraCT code [0-9]{4}-[0-9]{3}'
-        or id_value ~ 'EUDRACT-[0-9]{8}'
-        or id_value ~ ': [0-9]{6}$'
-        or id_value ~ 'umber [0-9]{3}$'
-        )
-        and id_type_id is null;"#;
-    execute_sql(sql, pool).await?;
-
-    // Create the correct format where possible
-
-    let sql = r#"update ad.temp_idents
-        set id_value = replace(id_value, '--', '-')
-        where id_value ~ '--'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;
-
-        update ad.temp_idents
-        set id_value ='Eudra '||substring(substring(id_value from '20[0-9]{10}'), 1, 4)||'-'||substring(substring(id_value from '20[0-9]{10}'), 5, 6)||'-'||substring(substring(id_value from '20[0-9]{10}'), 11, 2)
-        where id_value ~ '20[0-9]{10}'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = 'Eudra '||substring(substring(id_value from '20[0-9]{2}-[0-9]{8}'), 1, 11)||'-'||substring(substring(id_value from '20[0-9]{2}-[0-9]{8}'), 12, 2)
-        where id_value ~ '20[0-9]{2}-[0-9]{8}'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;
-
-        update ad.temp_idents
-        set id_value = 'Eudra '||substring(substring(id_value from '20[0-9]{8}-[0-9]{2}'), 1, 4)||'-'||substring(substring(id_value from '20[0-9]{8}-[0-9]{2}'), 5, 9)
-        where id_value ~ '20[0-9]{8}-[0-9]{2}'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = 'Eudra '||substring(substring(id_value from '20[0-9]{4}-[0-9]{4}-[0-9]{2}'), 1, 4)||'-'
-        ||substring(substring(id_value from '20[0-9]{4}-[0-9]{4}-[0-9]{2}'), 5, 2)
-        ||substring(substring(id_value from '20[0-9]{4}-[0-9]{4}-[0-9]{2}'), 8, 8)
-        where id_value ~ '20[0-9]{4}-[0-9]{4}-[0-9]{2}'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;
-
-        update ad.temp_idents
-        set id_value = 'Eudra '||substring(substring(id_value from '20[0-9]{2}-[0-9]{3} [0-9]{3}-[0-9]{2}'), 1, 8)
-        ||substring(substring(id_value from '20[0-9]{2}-[0-9]{3} [0-9]{3}-[0-9]{2}'), 10, 6)
-        where id_value ~ '20[0-9]{2}-[0-9]{3} [0-9]{3}-[0-9]{2}'
-        and id_value ilike '%eudr%'
-        and id_type_id is null;"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = replace(id_value, ' ', '-')
-        where (id_value ~ '20[0-9]{2} [0-9]{6} [0-9]{2}'
-        or id_value ~ '20[0-9]{2} [0-9]{6}-[0-9]{2}'
-        or id_value ~ '20[0-9]{2}-[0-9]{6} [0-9]{2}')
-        and id_value ilike '%eudr%'
-        and id_type_id is null;
-
-        update ad.temp_idents
-        set id_value = replace(id_value, '/', '-')
-        where (id_value ~ '20[0-9]{2}/[0-9]{6}/[0-9]{2}'
-        or id_value ~ '20[0-9]{2}/[0-9]{6}-[0-9]{2}'
-        or id_value ~ '20[0-9]{2}-[0-9]{6}/[0-9]{2}')
-        and id_value ilike '%eudr%'
-        and id_type_id is null;"#;
-    execute_sql(sql, pool).await?;
-    
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'),
-        id_type_id = 123,
-        source_org_id = 100159,
-        source_org = 'European Medicines Agency'
-        where id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}' 
-        and id_value ilike '%eudr%'
-        and id_value not ilike '%eudramed%'
-        and id_value not ilike '%eudract'"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} EU CTR identifiers found and labelled after re-formatting", res.rows_affected());	
-    info!("");
-
-    Ok(())
-}
-
-
-pub async fn find_other_eu_registry_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
-
-    // CTIS number
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from '20[2|3][0-9]-5[0-9]{5}-[0-9]{2}'),
-        id_type_id = 135,
-        source_org_id = 100159,
-        source_org = 'European Medicines Agency'
-        where id_value ~ '20[2|3][0-9]-5[0-9]{5}-[0-9]{2}'"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} EU CTIS identifiers found and labelled", res.rows_affected());	
-    info!("");
-
-    // ISRCTN
-
-    replace_string_in_ident("ISRCTN : ", "ISRCTN", pool).await?;   // preliminary tidying (few recs)
-    replace_string_in_ident("ISRCTN: ", "ISRCTN", pool).await?;  
-    replace_string_in_ident("ISRCTN:", "ISRCTN", pool).await?;  
-    replace_string_in_ident("ISRCTN No. ", "ISRCTN", pool).await?;  
-    replace_string_in_ident("ISRCTN ", "ISRCTN", pool).await?; 
-    replace_string_in_ident("ISRCTN-", "ISRCTN", pool).await?;  
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from 'ISRCTN[0-9]{8}'),
-        id_type_id = 126,
-        source_org_id = 101421,
-        source_org = 'Springer Nature'
-        where id_value ~ 'ISRCTN[0-9]{8}'"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} ISRCTN UK identifiers found and labelled", res.rows_affected());	
-    info!("");
-
-    // DRKS
-
-    replace_string_in_ident("DRKS number 0", "DRKS0", pool).await?;  // preliminary tidying (1 rec)
- 
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from 'DRKS[0-9]{8}'),
-        id_type_id = 124,
-        source_org_id = 105875,
-        source_org = 'Federal Institute for Drugs and Medical Devices'
-        where id_value ~ 'DRKS[0-9]{8}'"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} DRKS German identifiers found and labelled", res.rows_affected());	
-    info!("");
-
-    // DUTCH
-
-    let sql = r#"update ad.temp_idents
-    set id_value = replace(id_value, ' ', '')
-    where id_value ~ '^NTR [0-9]{1,4}$'"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-    set id_value = replace(id_value, '-', '')
-    where id_value ~ '^NTR-[0-9]{1,4}$'"#;
-    execute_sql(sql, pool).await?;
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from 'NTR[0-9]{1,4}'),
-        id_type_id = 181,
-        source_org_id = 0,
-        source_org = 'Centrale Commissie Mensgebonden Onderzoek'
-        where id_value ~ '^NTR[0-9]{1,4}'"#;
-
-    let res = execute_sql(sql, pool).await?;
-    info!("{} NTR Dutch identifiers found and labelled", res.rows_affected());	
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from 'NL[0-9]{4}'),
-        id_type_id = 182,
-        source_org_id = 0,
-        source_org = 'Centrale Commissie Mensgebonden Onderzoek'
-        where id_value ~ '^NL[0-9]{4}'
-        and length(id_value) < 7"#;
-
-    let res = execute_sql(sql, pool).await?;
-    info!("{} NL Dutch identifiers found and labelled", res.rows_affected());	
-
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from 'NL-OMON[0-9]{1,5}'),
-        id_type_id = 132,
-        source_org_id = 0,
-        source_org = 'Centrale Commissie Mensgebonden Onderzoek'
-        where id_value ~ 'NL-OMON[0-9]{1,5}'"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} NL-OMON Dutch identifiers found and labelled", res.rows_affected());	
-    info!("");
-
-    Ok(())
-}
-
 
 pub async fn find_japanese_registry_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    // UMIN 
 
     let sql = r#"update ad.temp_idents
         set id_value = 'JPRN-'||substring(id_value from 'C000[0-9]{6}'),
@@ -334,9 +40,44 @@ pub async fn find_japanese_registry_identities(pool: &Pool<Postgres>) -> Result<
         where id_desc ~ 'UMIN[0-9]{9}'"#;
     let res3 = execute_sql(sql, pool).await?;
 
-    info!("{} UMIN japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected() + res3.rows_affected());	
+    let sql = r#"update ad.temp_idents
+        set id_value = 'UMIN'||id_value
+        where id_desc ~ 'UMIN'
+        and id_value ~ '[0-9]{9}'
+        and id_type_id is null"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'JPRN-'||substring(id_value from 'UMIN[0-9]{9}'),
+        id_type_id = 141,
+        source_org_id = 100156,
+        source_org = 'University Hospital Medical Information Network'
+        where id_value ~ 'UMIN[0-9]{9}'
+        and id_type_id is null"#;
+    let res4 = execute_sql(sql, pool).await?;
+
+    info!("{} UMIN japanese identifiers found and labelled", res1.rows_affected() + 
+                        res2.rows_affected() + res3.rows_affected() + res4.rows_affected());	
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 179,
+        id_type = 'Malformed registry Id',
+        source_org_id = 100156,
+        source_org = 'University Hospital Medical Information Network'
+        where id_value ~ 'UMIN[0-9]{8}'
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "Malformed UMIN", "labelled").await?;
+    info!("");
+
+    // jRCT
 
     replace_string_in_ident("jRCT ", "jRCT", pool).await?; 
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'jRCT'||id_value
+        where id_value ~ '^[0-9]{10}'
+        and id_desc = 'jRCT'"#;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"update ad.temp_idents
         set id_value = 'JPRN-'||substring(id_value from 'jRCT[0-9]{10}'),
@@ -355,6 +96,7 @@ pub async fn find_japanese_registry_identities(pool: &Pool<Postgres>) -> Result<
     let res2 = execute_sql(sql, pool).await?;
 
     info!("{} jCRT japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
+    info!("");
 
     replace_string_in_ident("JAPIC", "Japic", pool).await?; 
     replace_string_in_ident("JapicCTI- ", "JapicCTI-", pool).await?; 
@@ -394,6 +136,17 @@ pub async fn find_japanese_registry_identities(pool: &Pool<Postgres>) -> Result<
     let res4 = execute_sql(sql, pool).await?;
 
     info!("{} JAPIC japanese identifiers found and labelled", res1.rows_affected() + res2.rows_affected() + res4.rows_affected());	
+    
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 179,
+        id_type = 'Malformed registry Id',
+        source_org_id = 100157,
+        source_org = 'Japan Pharmaceutical Information Center'
+        where id_value ~ 'JapicCTI-[0-9]{5}'
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "Malformed UMIN", "labelled").await?;
+    info!("");
+
 
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'JMA-IIA[0-9]{5}'),
@@ -434,13 +187,23 @@ pub async fn find_chinese_registry_identities(pool: &Pool<Postgres>) -> Result<(
     let res2 = execute_sql(sql, pool).await?;
     info!("{} ChiCTR Chinese identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
 
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 179,
+        id_type = 'Malformed registry Id',
+        source_org_id = 100494,
+        source_org = 'West China Hospital"'
+        where id_value ~ 'ChiCTR[0-9]{7,9}'
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "Malformed ChiCTR", "labelled").await?;
+    info!("");
+
    // ITMC 
 
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'ITMCTR[0-9]{10}'),
         id_type_id = 133,
-        source_org_id = 0,
-        source_org = 'Lebanese Ministry of Public Health'
+        source_org_id = 0102245,
+        source_org = 'China Academy of Chinese Medical Sciences'
         where id_value ~ 'ITMCTR[0-9]{10}'"#;
     let res = execute_sql(sql, pool).await?;
     info!("{} ITMCTR Trad Medicine identifiers found and labelled", res.rows_affected());	
@@ -457,7 +220,8 @@ pub async fn find_chinese_registry_identities(pool: &Pool<Postgres>) -> Result<(
         id_type_id = 156,
         source_org_id = 0,
         source_org = 'The University of Hong Kong'
-        where id_value ~ 'HKUCTR-[0-9]{1,4}'"#;
+        where id_value ~ 'HKUCTR-[0-9]{1,4}'
+        or id_value ~ 'HKCTR-[0-9]{1,4}'"#;
     let res = execute_sql(sql, pool).await?;
     info!("{} HKUCTR Hong Kong identifiers found and labelled", res.rows_affected());	
     info!("");

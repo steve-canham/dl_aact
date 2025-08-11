@@ -8,8 +8,25 @@ pub async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResu
         .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))
 }
 
+/* 
+pub async fn execute_sql_fb(sql: &str, pool: &Pool<Postgres>, 
+            s1: &str, s2: &str) -> Result<(), AppError> {
+    
+    let res = sqlx::raw_sql(&sql).execute(pool)
+        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
 
-pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sql_linker: &str, rec_type: &str, pool: &Pool<Postgres>) -> Result<u64, AppError> {
+    if res.rows_affected() > 1 {
+        info!("{} {} identifiers {}", res.rows_affected(), s1, s2);
+    }
+    else {
+        info!("{} {} identifier {}", res.rows_affected(), s1, s2);
+    }
+    
+    Ok(())
+}
+*/
+
+pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sql_linker: &str, rec_type: &str, rec_dest: &str, pool: &Pool<Postgres>) -> Result<u64, AppError> {
     
     let mut rec_num: u64 = 0;
     let mut start_num: u64 = 0;
@@ -24,7 +41,7 @@ pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sq
             .await.map_err(|e| AppError::SqlxError(e, chsql.to_string()))?;
         let recs = res.rows_affected();
         rec_num += recs;
-        info!("{} {} transferred, {}", recs, rec_type, chunk_sql);
+        info!("{} {} transferred to {}, {}", recs, rec_type, rec_dest, chunk_sql);
 
         start_num = end_num;
     }

@@ -2,6 +2,8 @@ mod studies;
 
 mod idents;
 mod idents_reg;
+mod idents_us;
+mod idents_eu;
 mod idents_utils;
 
 mod locs;
