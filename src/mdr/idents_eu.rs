@@ -514,7 +514,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     execute_sql_fb(sql, pool, "Malformed Dutch NTR", "labelled").await?; 
     info!("");
 
-    // DUTCH NL
+    // DUTCH NL - CCMO
 
     // Makes it easier if the CCMO approval numbers aer done first (they are also NL)
     // First tidy up data by making formatting more consistent, and turn the IDs that appear to 
@@ -600,7 +600,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
 
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NL[0-9]{5}\.[0-9]{3}\.[0-9]{2}'),
-        id_type_id = 351,
+        id_type_id = 801,
         id_type = 'Dutch CCMO ID',
         source_org_id = 109113,
         source_org = 'CCMO'
@@ -609,7 +609,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     execute_sql_fb(sql, pool, "Dutch CCMO", "found and labelled").await?;  
 
     let sql = r#"update ad.temp_idents
-        set id_type_id = 2351,
+        set id_type_id = 2801,
         id_type = 'Malformed Dutch CCMO ID',
         source_org = 'CCMO'
         where (id_value ~ 'NL[0-9]{3,4}\.[0-9]{3}\.[0-9]{2}'
@@ -618,7 +618,8 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     execute_sql_fb(sql, pool, "Malformed Dutch CCMO", "found and labelled").await?;   
     info!("");
 
-    // DUTCH NL
+    // DUTCH NL - Registry IDs
+
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NL[0-9]{4}'),
         id_type_id = 182,
@@ -648,7 +649,8 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
 
 
 pub async fn find_german_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
-let sql = r#"update ad.temp_idents
+    
+    let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'DRKS[0-9]{8}'),
         id_type_id = 124,
         id_type = 'German DRKS ID',

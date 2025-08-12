@@ -2,6 +2,7 @@
 use super::idents_us;
 use super::idents_eu;
 use super::idents_reg;
+use super::idents_oth;
 
 use super::utils::{execute_sql, execute_phased_transfer, vacuum_table};
 use super::idents_utils::{transfer_coded_identifiers, execute_temp_phased_transfer, 
@@ -169,6 +170,17 @@ pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgr
         reuse_spare_idents_data(max_id, chunk_size, pool).await?;
     }
 
+    idents_oth::find_zonmw_identities(pool).await?;
+    idents_oth::find_eortc_identities(pool).await?;
+    idents_oth::find_cruk_identities(pool).await?;
+    idents_oth::find_basel_ctu_identities(pool).await?;
+    idents_oth::find_swiss_basec_identities(pool).await?;
+    idents_oth::find_chinadrugtrials_nmpa_identities(pool).await?;
+    idents_oth::find_daides_identities(pool).await?;
+    idents_oth::find_eli_lilley_identities(pool).await?;
+
+    transfer_coded_identifiers(pool).await?;
+
     // Find non registry Ids, e.g. from funders, regulators, registries
 /*
     find_eu_regulators_identities(pool).await?;
@@ -309,7 +321,7 @@ async fn reuse_spare_idents_data(max_id: u64, chunk_size: u64, pool: &Pool<Postg
         select id, sd_sid, id_value, id_type_id, id_type, source_org_id, source_org, 
         source_ror_id, id_date, id_link, added_on, coded_on
         from ad.spare_study_identifiers c "#;
-    execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "temp_idents", pool).await?;
+    execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "study_identifiers", pool).await?;
 
     Ok(())
 }
@@ -352,16 +364,14 @@ async fn create_copy_of_identifiers(max_id: u64, chunk_size: u64, pool: &Pool<Po
 async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     // There seem to be about 720 doubled identifier records, with each
-    // pair split by a semi-colon. Not all records with semi-colons are doubles,
-    // and some doubled identifiers use a different delimiter, but the semi-colon seems
-    // to be a reasonable starting point.
+    // pair normally split by a semi-colon. 
 
     // As an initial step, remove semi-colons from the start and end of identifiers.
 
     remove_both_ldtr_char_from_ident(';', pool).await?;
 
-    // First though, a small group of identifiers including '(V/v)ersion' or 'v' followed by a number have a semi-colon 
-    // before the date. In these case the semi-colon shopuld just be removed.
+    // A small group of identifiers including '(V/v)ersion' or 'v' followed by a number have a semi-colon 
+    // before the date. In these case the semi-colon should just be removed.
 
     let sql = r#"update ad.temp_idents
         set id_value = replace(id_value, ';', '')
@@ -369,18 +379,18 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         or id_value ~ 'v [0-9]' or id_value ~ '^v[0-9]'
         or id_value ~ 'v.[0-9]')
         and id_value ilike '%;%';"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
-    // There is a particular group of doubled identifiers that come from the 
-    // Clinical Trials Unit in Basel. In each case the first id is a Swiss
-    // BASEC (ethics system) number, and the second is an internal CTU
-    // identifier. These should be botrh split and identified.
-    
+    // There is a large group of doubled identifiers that come from the 
+    // Clinical Trials Unit in Basel. In each one id is an internal (Basel) CTU
+    // identifier, while the other is normally a Swiss BASEC (ethics system) 
+    // identifier. These should be both split and identified.
+ 
     let sql = r#"insert into ad.temp_idents
         (id, sd_sid, id_value, id_class, id_desc)
         select id, sd_sid, trim(substring(id_value, position(';' in id_value) + 1)), id_class, 'Basel CTU ID'
         from ad.temp_idents
-        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
    execute_sql(sql, pool).await?;
 
@@ -388,12 +398,12 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         (id, sd_sid, id_value, id_class, id_desc)
         select id, sd_sid, trim(substring(id_value, 1, position(';' in id_value) - 1)), id_class, 'BASEC ID'
         from ad.temp_idents
-        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
    execute_sql(sql, pool).await?;
 
     let sql = r#"delete from ad.temp_idents
-        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
     let res1 = execute_sql(sql, pool).await?;
 
@@ -403,7 +413,7 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         (id, sd_sid, id_value, id_class, id_desc)
         select id, sd_sid, trim(substring(id_value, position(',' in id_value) + 1)), id_class, 'Basel CTU ID'
         from ad.temp_idents
-        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
    execute_sql(sql, pool).await?;
 
@@ -411,16 +421,17 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         (id, sd_sid, id_value, id_class, id_desc)
         select id, sd_sid, trim(substring(id_value, 1, position(',' in id_value) - 1)), id_class, 'BASEC ID'
         from ad.temp_idents
-        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
    execute_sql(sql, pool).await?;
 
     let sql = r#"delete from ad.temp_idents
-        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-5]+$'
+        where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
     let res2 = execute_sql(sql, pool).await?;
 
-    info!("{} Basel CTU records with semi-colons or commas split", res1.rows_affected() + res2.rows_affected());
+    info!("{} Swiss double identifier records split", res1.rows_affected() + res2.rows_affected());
+
 
     // The remaining semi-colon containing identifiers can then be split and added
     // to the table.
@@ -1119,46 +1130,7 @@ async fn code_very_short_unidentifiable_ids(pool: &Pool<Postgres>) -> Result<(),
 
 /*
 
-
-async fn find_ethics_oversight_identities(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-
-    Ok(())
-}
-
-
 async fn find_other_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
-
-     replace_string_in_ident("EORTC ", "EORTC-", pool).await?;  
-    
-    let sql = r#"update ad.temp_idents
-        set id_source_org = 'sponsor_id',
-        id_type_id = 176,
-        source_org_id = 100010,
-        source_org = 'EORTC'
-        where id_value ~ '^EORTC'"#;
-    let res1 = execute_sql(sql, pool).await?;
-    
-    let sql = r#"update ad.temp_idents
-        set id_value = substring(id_value from 'EORTC-[0-9]{4,5}'),
-        id_source_org = 'sponsor_id',
-        id_type_id = 176,
-        source_org_id = 100010,
-        source_org = 'EORTC'
-        where id_value ~ 'EORTC-[0-9]{4,5}'
-        and id_type_id is null"#;
-    let res2 = execute_sql(sql, pool).await?;
-
-    info!("{} EORTC identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
-
-    let sql = r#"update ad.temp_idents
-        set id_source_org = 'funder_id',
-        id_type_id = 410,
-        source_org_id = 100517,
-        source_org = 'Cancer Research UK'
-        where id_value ~ '^CRUK'"#;
-    let res = execute_sql(sql, pool).await?;
-    info!("{} CRUK identifiers found and labelled", res.rows_affected());	
-
 
     // NCI CTEP - NEEDS REDOING  TO IDENTIFY INDIVIDUAL COLLAB GROUPS
 
@@ -1183,7 +1155,6 @@ async fn find_other_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {
 
     let res2 = execute_sql(sql, pool).await?;
  
-
     info!("");
     Ok(())
 }

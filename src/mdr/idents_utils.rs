@@ -37,6 +37,7 @@ pub async fn execute_sql_sfb(sql: &str, pool: &Pool<Postgres>, s: &str) -> Resul
     Ok(())
 }
 
+
 pub async fn execute_temp_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sql_linker: &str, rec_type: &str, pool: &Pool<Postgres>) -> Result<u64, AppError> {
     
     let mut rec_num: u64 = 0;
