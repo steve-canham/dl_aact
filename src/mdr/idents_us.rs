@@ -46,7 +46,7 @@ pub async fn find_us_nci_identifiers(pool: &Pool<Postgres>) -> Result<(), AppErr
 
     let sql = r#"update ad.temp_idents
         set id_type_id = 178,
-        id_type = 'NCI identifier (unclassified)',
+        id_type = 'NCI identifier',
         source_org_id = 100162,
         source_org = 'National Cancer Institute'
         where (id_desc in ('NCI', 'National Cancer Institute')
@@ -213,7 +213,7 @@ pub async fn find_fda_identifiers(pool: &Pool<Postgres>) -> Result<(), AppError>
 
     let sql = r#"update ad.temp_idents
         set id_type_id = 185,
-        id_type = 'FDA identifier (unclassified)',
+        id_type = 'FDA identifier',
         source_org_id = 108548,
         source_org = 'Food and Drug Administration'
         where id_type_id is null
@@ -297,8 +297,8 @@ pub async fn find_other_us_grant_identifiers(pool: &Pool<Postgres>) -> Result<()
     let res2 = execute_sql(sql, pool).await?;
 
     info!("{} Department of Defense grant identifiers found and labelled", res1.rows_affected() + res2.rows_affected());	
-
     info!("");
+    
     Ok(())
 }
 

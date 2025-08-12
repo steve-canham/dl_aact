@@ -147,33 +147,27 @@ pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgr
         idents_us::find_fda_identifiers(pool).await?;
         idents_us::find_other_us_grant_identifiers(pool).await?;
         transfer_coded_identifiers(pool).await?;
+
+        idents_eu::find_ansm_identities(pool).await?;
+        idents_eu::find_eu_wide_identities(pool).await?;
+        idents_eu::find_dutch_identities(pool).await?;
+        idents_eu::find_german_identities(pool).await?;
+        idents_eu::find_isrctn_identities(pool).await?;
+        transfer_coded_identifiers(pool).await?;
+
+        idents_reg::find_japanese_registry_identities(pool).await?;
+        idents_reg::find_chinese_registry_identities(pool).await?;
+        idents_reg::find_other_asian_registry_identities(pool).await?;
+        idents_reg::find_middle_eastern_registry_identities(pool).await?;
+        idents_reg::find_latin_american_registry_identities(pool).await?;
+        idents_reg::find_other_registry_identities(pool).await?;
+        transfer_coded_identifiers(pool).await?;
        
         park_spare_idents_data(max_id, chunk_size, pool).await?;
     }
     else {
         reuse_spare_idents_data(max_id, chunk_size, pool).await?;
     }
-
-    // Can now start matching against regular expresions representing trial registry formats.
-
-    //idents_reg::find_eudract_registry_identities(pool).await?;
-    //idents_reg::find_other_eu_registry_identities(pool).await?;
-
-    idents_eu::find_ansm_identities(pool).await?;
-    idents_eu::find_eu_wide_identities(pool).await?;
-    idents_eu::find_dutch_identities(pool).await?;
-    idents_eu::find_german_identities(pool).await?;
-    idents_eu::find_isrctn_identities(pool).await?;
-    transfer_coded_identifiers(pool).await?;
-
-    idents_reg::find_japanese_registry_identities(pool).await?;
-    idents_reg::find_chinese_registry_identities(pool).await?;
-    
-    idents_reg::find_other_asian_registry_identities(pool).await?;
-    idents_reg::find_middle_eastern_registry_identities(pool).await?;
-    idents_reg::find_latin_american_registry_identities(pool).await?;
-    idents_reg::find_other_registry_identities(pool).await?;
-    //transfer_coded_identifiers(pool).await?;
 
     // Find non registry Ids, e.g. from funders, regulators, registries
 /*
@@ -248,7 +242,7 @@ async fn park_spare_idents_data(max_id: u64, chunk_size: u64, pool: &Pool<Postgr
         select id, sd_sid, id_value, id_type_id, id_type, source_org_id, source_org, 
         source_ror_id, id_date, id_link, added_on, coded_on
         from ad.study_identifiers c "#;
-    execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "temp_idents", pool).await?;
+    execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "study_identifiers", pool).await?;
 
     let sql = r#"SET client_min_messages TO NOTICE;"#;
    execute_sql(sql, pool).await?;

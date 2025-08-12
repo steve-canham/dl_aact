@@ -14,7 +14,7 @@ pub async fn find_ansm_identities(pool: &Pool<Postgres>) -> Result<(), AppError>
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'),
         id_type_id = 301,
-        id_type = 'ANSM ID',
+        id_type = 'ANSM (ID-RCB) number',
         source_org_id = 101408,
         source_org = 'Agence Nationale de Sécurité du Médicament'
         where id_value ~ '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'
@@ -24,7 +24,7 @@ pub async fn find_ansm_identities(pool: &Pool<Postgres>) -> Result<(), AppError>
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_desc from '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'),
         id_type_id = 301,
-        id_type = 'ANSM ID',
+        id_type = 'ANSM (ID-RCB) number',
         source_org_id = 101408,
         source_org = 'Agence Nationale de Sécurité du Médicament'
         where id_desc ~ '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'
@@ -36,7 +36,7 @@ pub async fn find_ansm_identities(pool: &Pool<Postgres>) -> Result<(), AppError>
     let sql = r#"update ad.temp_idents
         set id_value = replace(substring(id_value from '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'), 'O', '0'),
         id_type_id = 301,
-        id_type = 'ANSM ID',
+        id_type = 'ANSM (ID-RCB) number',
         source_org_id = 101408,
         source_org = 'Agence Nationale de Sécurité du Médicament'
         where id_value ~ '20[0-9]{2}-AO[0-9]{4}-[0-9]{2}'
@@ -108,7 +108,7 @@ pub async fn find_ansm_identities(pool: &Pool<Postgres>) -> Result<(), AppError>
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'),
         id_type_id = 301,
-        id_type = 'ANSM ID',
+        id_type = 'ANSM (ID-RCB) number',
         source_org_id = 101408,
         source_org = 'Agence Nationale de Sécurité du Médicament'
         where id_value ~ '20[0-9]{2}-A[0-9]{5}-[0-9]{2}'
@@ -119,8 +119,8 @@ pub async fn find_ansm_identities(pool: &Pool<Postgres>) -> Result<(), AppError>
     // And also characterise the ill-formed ones
 
     let sql = r#"update ad.temp_idents
-        set id_type_id = 179,
-        id_type = 'Malformed Id',
+        set id_type_id = 2301,
+        id_type = 'Malformed ANSM ID',
         source_org_id = 101408,
         source_org = 'Agence Nationale de Sécurité du Médicament'
         where (id_value ~ '20[0-9]{2}-A[0-9]{4}-[0-9]{2}'
@@ -144,6 +144,7 @@ pub async fn find_eu_wide_identities(pool: &Pool<Postgres>) -> Result<(), AppErr
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'),
         id_type_id = 123,
+        id_type = 'EMA Eudract ID',
         source_org_id = 100159,
         source_org = 'European Medicines Agency'
         where id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}' 
@@ -308,6 +309,7 @@ pub async fn find_eu_wide_identities(pool: &Pool<Postgres>) -> Result<(), AppErr
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from '20[0-9]{2}-0[0-9]{5}-[0-9]{2}'),
         id_type_id = 123,
+        id_type = 'EMA Eudract ID',
         source_org_id = 100159,
         source_org = 'European Medicines Agency'
         where id_value ~ '20[0-9]{2}-0[0-9]{5}-[0-9]{2}' 
@@ -319,8 +321,8 @@ pub async fn find_eu_wide_identities(pool: &Pool<Postgres>) -> Result<(), AppErr
     // identify obvious mis-formed and uncorrectable ones
 
     let sql = r#"update ad.temp_idents 
-        set id_type_id = 179,
-        id_type = 'Malformed registry Id',
+        set id_type_id = 2123,
+        id_type = 'Malformed Eudract ID',
         source_org_id = 100159,
         source_org = 'European Medicines Agency'
         where id_value ilike '%eudr%'
@@ -344,10 +346,112 @@ pub async fn find_eu_wide_identities(pool: &Pool<Postgres>) -> Result<(), AppErr
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from '20[2|3][0-9]-5[0-9]{5}-[0-9]{2}'),
         id_type_id = 135,
+        id_type = 'EMA CTIS ID',
         source_org_id = 100159,
         source_org = 'European Medicines Agency'
         where id_value ~ '20[2|3][0-9]-5[0-9]{5}-[0-9]{2}'"#;
     execute_sql_fb(sql, pool, "EU CTIS", "found and labelled").await?;
+    info!("");
+
+    // Eudamed ID
+    
+    // Preliminary procesing 
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, 'CVI', 'CIV')
+        where id_value ~ 'CVI-[0-9]{2}-[0-9]{2}-[0-9]{6}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, 'CVI ', 'CIV-')
+        where id_value ~ 'CIV [0-9]{2}-[0-9]{2}-[0-9]{6}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, ' ', '-')
+        where id_value ~ 'CIV-[0-9] [0-9]-[0-9]{2}-[0-9]{6}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, ' ', '')
+        where id_value ~ 'CIV -[0-9]{2}-[0-9]{2}-[0-9]{6}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, ' ', '')
+        where id_value ~ 'CIV- [0-9]{2}-[0-9]{2}-[0-9]{6}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, 'CIV-ID ', 'CIV-')
+        where id_value ~ 'CIV-ID [0-9]{2}-[0-9]{2}-[0-9]{6}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(replace(id_value, ' ', ''), 'Cl', 'CI')
+        where id_value ~ 'Cl V-1 3-03';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, '1-8', '18')
+        where id_value ~ 'CIV-1-8-06';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+        set id_value = 'CIV-'||id_value
+        where (id_desc ~ 'CIV' or id_desc ~* 'EudaMed')
+        and id_value ~ '^[0-9]{2}-[0-9]{2}';"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"update ad.temp_idents
+    set id_value = substring(id_value from 'CIV-[0-9]{2}-[0-9]{2}-[0-9]{6}'),
+            id_type_id =  186,
+            id_type = 'Eudamed ID',
+            source_org_id = 100574,
+            source_org = 'European Commission'
+    where id_value ~ 'CIV-[0-9]{2}-[0-9]{2}-[0-9]{6}'"#;
+    execute_sql_fb(sql, pool, "Eudamed", "found and labelled").await?;
+
+    let sql = r#"update ad.temp_idents
+    set id_value = substring(id_value from 'CIV-[A-Z]{2}-[0-9]{2}-[0-9]{2}-[0-9]{6}'),
+            id_type_id =  186,
+            id_type = 'Eudamed ID',
+            source_org_id = 100574,
+            source_org = 'European Commission'
+    where id_value ~'CIV-[A-Z]{2}-[0-9]{2}-[0-9]{2}-[0-9]{6}'"#;
+    execute_sql_fb(sql, pool, "Eudamed", "with country codes found and labelled").await?;
+
+    let sql = r#"update ad.temp_idents
+    set id_type_id =  2186,
+        id_type = 'Malformed Eudamed ID',
+        source_org_id = 100574,
+        source_org = 'European Commission'
+    where id_value ~'^CIV-'
+    and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "Malformed Eudamed", "labelled").await?;
+
+    // Tidy up
+
+    let sql = r#"update ad.temp_idents
+    set id_desc = null
+    where (id_desc ~ 'CIV' or id_desc ~* 'EudaMed')
+    and id_type_id is null"#;
+    execute_sql(sql, pool).await?;
+
+    info!("");
+
+    // EUPAS ID
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(id_value, ' ', ''),
+        id_type_id =  187,
+        id_type = 'HMA-EMA RWD (EUPAS)',
+        source_org_id = 100159,
+        source_org = 'European Medicines Agency'
+        where id_value ~ '^EUPAS[0-9]{3,12}'
+        or id_value ~ '^EUPAS [0-9]{3,12}'"#;
+    execute_sql_fb(sql, pool, "HMA-EMA RWD (EUPAS)", "found and labelled").await?;
+
     info!("");
 
     Ok(())
@@ -371,6 +475,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NTR[0-9]{1,4}'),
         id_type_id = 181,
+        id_type = 'Dutch CTR NTR ID (obs)',
         source_org_id = 0,
         source_org = 'Centrale Commissie Mensgebonden Onderzoek'
         where id_value ~ '^NTR[0-9]{1,4}'"#;
@@ -391,6 +496,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NTR[0-9]{1,4}'),
         id_type_id = 181,
+        id_type = 'Dutch CTR NTR ID (obs)',
         source_org_id = 0,
         source_org = 'Centrale Commissie Mensgebonden Onderzoek'
         where id_value ~ '^NTR[0-9]{1,4}'
@@ -399,8 +505,8 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     execute_sql_fb(sql, pool, "Additional NTR Dutch", "found after repairing data").await?; 
 
     let sql = r#"update ad.temp_idents
-        set id_type_id = 179,
-        id_type = 'Malformed registry Id',
+        set id_type_id = 2181,
+        id_type = 'Malformed Dutch NTR ID',
         source_org_id = 0,
         source_org = 'Centrale Commissie Mensgebonden Onderzoek'
         where id_value ~ '^NTR[0-9]{5}'
@@ -495,6 +601,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NL[0-9]{5}\.[0-9]{3}\.[0-9]{2}'),
         id_type_id = 351,
+        id_type = 'Dutch CCMO ID',
         source_org_id = 109113,
         source_org = 'CCMO'
         where id_value ~ 'NL[0-9]{5}\.[0-9]{3}\.[0-9]{2}'
@@ -502,8 +609,8 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     execute_sql_fb(sql, pool, "Dutch CCMO", "found and labelled").await?;  
 
     let sql = r#"update ad.temp_idents
-        set id_type_id = 179,
-        id_type = 'Malformed registry Id',
+        set id_type_id = 2351,
+        id_type = 'Malformed Dutch CCMO ID',
         source_org = 'CCMO'
         where (id_value ~ 'NL[0-9]{3,4}\.[0-9]{3}\.[0-9]{2}'
         or id_value ~ 'NL[0-9]{6}\.[0-9]{3}\.[0-9]{2}')
@@ -515,6 +622,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NL[0-9]{4}'),
         id_type_id = 182,
+        id_type = 'Dutch CTR NL ID (obs)',
         source_org_id = 0,
         source_org = 'Centrale Commissie Mensgebonden Onderzoek'
         where id_value ~ '^NL[0-9]{4}'
@@ -527,6 +635,7 @@ pub async fn find_dutch_identities(pool: &Pool<Postgres>) -> Result<(), AppError
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'NL-OMON[0-9]{1,5}'),
         id_type_id = 132,
+        id_type = 'Dutch CTR NL-OMON ID',
         source_org_id = 0,
         source_org = 'Centrale Commissie Mensgebonden Onderzoek'
         where id_value ~ 'NL-OMON[0-9]{1,5}'"#;
@@ -542,6 +651,7 @@ pub async fn find_german_identities(pool: &Pool<Postgres>) -> Result<(), AppErro
 let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'DRKS[0-9]{8}'),
         id_type_id = 124,
+        id_type = 'German DRKS ID',
         source_org_id = 105875,
         source_org = 'Federal Institute for Drugs and Medical Devices'
         where id_value ~ 'DRKS[0-9]{8}'"#;
@@ -556,6 +666,7 @@ let sql = r#"update ad.temp_idents
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'DRKS[0-9]{8}'),
         id_type_id = 124,
+        id_type = 'German DRKS ID',
         source_org_id = 105875,
         source_org = 'Federal Institute for Drugs and Medical Devices'
         where id_value ~ 'DRKS[0-9]{8}'
@@ -563,8 +674,8 @@ let sql = r#"update ad.temp_idents
     execute_sql_fb(sql, pool, "Additional DRKS German", "found after repairing data").await?;
     
     let sql = r#"update ad.temp_idents
-        set id_type_id = 179,
-        id_type = 'Malformed registry Id',
+        set id_type_id = 2124,
+        id_type = 'Malformed German DRKS ID',
         source_org_id = 105875,
         source_org = 'Federal Institute for Drugs and Medical Devices'
         where (id_value ~ 'DRKS[0-9]{5,7}' or id_value ~ 'DRKS[0-9]{9}')
@@ -589,6 +700,7 @@ pub async fn find_isrctn_identities(pool: &Pool<Postgres>) -> Result<(), AppErro
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'ISRCTN[0-9]{8}'),
         id_type_id = 126,
+        id_type = 'ISRCTN ID',
         source_org_id = 101421,
         source_org = 'Springer Nature'
         where id_value ~ 'ISRCTN[0-9]{8}'"#;
@@ -604,6 +716,7 @@ pub async fn find_isrctn_identities(pool: &Pool<Postgres>) -> Result<(), AppErro
     let sql = r#"update ad.temp_idents
         set id_value = substring(id_value from 'ISRCTN[0-9]{8}'),
         id_type_id = 126,
+        id_type = 'ISRCTN ID',
         source_org_id = 101421,
         source_org = 'Springer Nature'
         where id_value ~ 'ISRCTN[0-9]{8}'
@@ -611,8 +724,8 @@ pub async fn find_isrctn_identities(pool: &Pool<Postgres>) -> Result<(), AppErro
     execute_sql_fb(sql, pool, "Additional ISRCTN", "ound after repairing data").await?;
        
     let sql = r#"update ad.temp_idents
-        set id_type_id = 179,
-        id_type = 'Malformed registry Id',
+        set id_type_id = 2126,
+        id_type = 'Malformed ISRCTN Id',
         source_org_id = 101421,
         source_org = 'Springer Nature'
         where (id_value ~ 'ISRCTN[0-9]{4,7}'
