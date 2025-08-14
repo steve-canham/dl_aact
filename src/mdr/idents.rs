@@ -178,6 +178,8 @@ pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgr
     idents_oth::find_chinadrugtrials_nmpa_identities(pool).await?;
     idents_oth::find_daides_identities(pool).await?;
     idents_oth::find_eli_lilley_identities(pool).await?;
+    idents_oth::find_taiwanese_identities(pool).await?;
+    idents_oth::find_collab_group_identities(pool).await?;
 
     transfer_coded_identifiers(pool).await?;
 

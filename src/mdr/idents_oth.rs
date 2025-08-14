@@ -231,3 +231,406 @@ let sql = r#"update ad.temp_idents
     info!("");    
     Ok(())
 }
+
+
+pub async fn find_taiwanese_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 189,
+        id_type = 'National Taiwan Univ Hosp Study ID',
+        source_org_id = 100186,
+        source_org = 'National Taiwan University Hospital'
+        where id_value ~ '^20(1|2)[0-9]{6}[A-Z]IND'"#;
+    execute_sql_fb(sql, pool, "National Taiwan University Hospital Study", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 412,
+        id_type = 'National Science and Technology Council Taiwan Grant ID',
+        source_org_id = 0,
+        source_org = 'National Science and Technology Council Taiwan'
+        where id_value ~ '^NSTC( |-)?1[0-9]{2}-'"#;
+    execute_sql_fb(sql, pool, "Nat Science and Technology Council Taiwan Grant", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 413,
+        id_type = 'Ministry of Health and Welfare Taiwan Grant ID',
+        source_org_id = 0,
+        source_org = 'Ministry of Health and Welfare Taiwan'
+        where id_value ~ '^MOHW( |-)?1[0-9]{2}-'"#;
+    execute_sql_fb(sql, pool, "Min of Health and Welfare Taiwan Grant", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 414,
+        id_type = 'Ministry of Science and Technology Taiwan Grant ID',
+        source_org_id = 102335,
+        source_org = 'Ministry of Science and Technology Taiwan'
+        where id_value ~ '^MOST( |-)?1[0-9]{2}-'"#;
+    execute_sql_fb(sql, pool, "Min of Science and Technology Taiwan Grant", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 415,
+        id_type = 'Department of Health Taiwan Grant ID',
+        source_org_id = 0,
+        source_org = 'Department of Health Taiwan'
+        where id_value ~ '^DOH-?9[0-9](-|F)'"#;
+    execute_sql_fb(sql, pool, "Department of Health Taiwan Grant", "found and labelled").await?;  
+
+    info!("");    
+    Ok(())
+}
+
+
+pub async fn find_collab_group_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    // CSWOG
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 195,
+        id_type = 'China Association for Clinical Onc. ID',
+        source_org_id = 0,
+        source_org = 'China Southern Association for Clinical Oncology'
+        where id_value ~ '^CSWOG'"#;
+    execute_sql_fb(sql, pool, "Chinese SWOG", "found and labelled").await?;  
+
+    // KSWOG
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 194,
+        id_type = 'Korean SW Onc. Group ID',
+        source_org_id = 0,
+        source_org = 'Korean South West Oncology Group'
+        where id_value ~ '^KSWOG'"#;
+    execute_sql_fb(sql, pool, "Korean SWOG", "found and labelled").await?;  
+
+    // SWOG 
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 193,
+        id_type = 'South West Onc. Group ID (US)',
+        source_org_id = 100358,
+        source_org = 'South West Oncology Group'
+        where id_value ~ '^SWOG'
+        and (length(id_value) <= 12
+        or (id_value ~ 'ICSC$' and length(id_value) <= 16)
+        or id_value ~ '-S[0-9]{4}-S[0-9]{4}'
+        or id_value ~ '-S[0-9]{4}-[0-9]{4}'
+        or id_value ~ '-S[0-9]{4}/S[0-9]{4}')"#;
+    execute_sql_fb(sql, pool, "US SWOG", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 220,
+        id_type = 'Ad Hoc Collaboration ID',
+        source_org_id = 0,
+        source_org = 'Ad hoc Collaboration of research organisations'
+        where id_value ~ 'SWOG' 
+        and id_type_id is null"#;
+    let res1 = execute_sql(sql, pool).await?;
+
+
+    // CECOG
+
+    let sql = r#"update ad.temp_idents
+        set id_value = replace(replace(id_value, '/', ' '), '  ', ' '),
+        id_type_id = 196,
+        id_type = 'Central European Cooperative Onc. Group ID',
+        source_org_id = 0,
+        source_org = 'Central European Cooperative Oncology Group'
+        where id_value ~ '^CECOG'"#;
+    execute_sql_fb(sql, pool, "Central European COG", "found and labelled").await?;  
+
+    // ECOG
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 201,
+        id_type = 'ECOG-ACRIN ID (US)',
+        source_org_id = 101684,
+        source_org = 'Eastern Cooperative Oncology Group / American College of Radiology Imaging Network'
+        where id_value ~ 'ECOG-ACRIN'"#;
+    execute_sql_fb(sql, pool, "ECOG-ACRIN", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 200,
+        id_type = 'American Coll. of Radiology Imaging Network ID',
+        source_org_id = 104735,
+        source_org = 'American College of Radiology Imaging Network'
+        where id_value ~ 'ACRIN'
+        and (length(id_value) <= 14 or id_value ~ 'RESCUE$')
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "ACRIN", "found and labelled").await?;  
+
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 220,
+        id_type = 'Ad Hoc Collaboration ID',
+        source_org_id = 0,
+        source_org = 'Ad hoc Collaboration of research organisations'
+        where id_value ~ 'ACRIN' 
+        and id_type_id is null"#;
+    let res2 = execute_sql(sql, pool).await?;
+
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 199,
+        id_type = 'Eastern Cooperative Onc. Group ID (US)',
+        source_org_id = 100428,
+        source_org = 'Eastern Cooperative Oncology Group'
+        where (id_value ~ '^ECOG' or id_value = 'E8200 ECOG')
+        and length(id_value) <= 16 
+        and id_value !~ 'RTOG'
+        and id_value !~ 'NCIC'
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "ECOG", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 220,
+        id_type = 'Ad Hoc Collaboration ID',
+        source_org_id = 0,
+        source_org = 'Ad hoc Collaboration of research organisations'
+        where id_value ~ 'ECOG'
+        and id_type_id is null"#;
+    let res3 = execute_sql(sql, pool).await?;
+
+    // CALCGB
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 190,
+        id_type = 'Cancer & Leukemia GrpB ID (US)',
+        source_org_id = 101892,
+        source_org = 'Cancer and Leukemia Group B (US)'
+        where id_value ~ '^CALGB'
+        and (length(id_value) <= 14 
+        or (id_value ~ 'ICSC$' and length(id_value) <= 18))"#;
+    execute_sql_fb(sql, pool, "CALGB", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 220,
+        id_type = 'Ad Hoc Collaboration ID',
+        source_org_id = 0,
+        source_org = 'Ad hoc Collaboration of research organisations'
+        where id_value ~ 'CALGB'
+        and id_type_id is null"#;
+    let res4 = execute_sql(sql, pool).await?;
+
+
+    // CAN-NCIC
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 204,
+        id_type = 'National Cancer Inst. of Canada ID',
+        source_org_id = 100530,
+        source_org = 'NCIC Clinical Trials Group'
+        where id_value ~ '^CAN-NCIC'
+        and id_value !~ 'GOG'
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "CAN-NCIC", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 220,
+        id_type = 'Ad Hoc Collaboration ID',
+        source_org_id = 0,
+        source_org = 'Ad hoc Collaboration of research organisations'
+        where id_value ~ 'CAN-NCIC' 
+        and id_type_id is null"#;
+    let res5 = execute_sql(sql, pool).await?;
+
+
+    // CRTOG
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 205,
+        id_type = 'Chinese Radiation Therapy Onc. Group ID',
+        source_org_id = 0,
+        source_org = 'Chinese Radiation Therapy Oncology Group'
+        where id_value ~ 'CRTOG'"#;
+    execute_sql_fb(sql, pool, "Chinese RTOG", "found and labelled").await?;  
+
+    // RTOG
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 191,
+        id_type = 'Radiation Therapy Onc. Group ID (US)',
+        source_org_id = 100525,
+        source_org = 'Radiation Therapy Oncology Group (US)'
+        where id_value ~ '^RTOG'
+        and id_value !~ 'GOG'
+        and id_type_id is null"#;
+    execute_sql_fb(sql, pool, "RTOG", "found and labelled").await?;  
+
+    let sql = r#"update ad.temp_idents
+        set id_type_id = 220,
+        id_type = 'Ad Hoc Collaboration ID',
+        source_org_id = 0,
+        source_org = 'Ad hoc Collaboration of research organisations'
+        where id_value ~ 'RTOG' 
+        and id_type_id is null"#;
+    let res6 = execute_sql(sql, pool).await?;
+
+    let r = res1.rows_affected() + res2.rows_affected() + res3.rows_affected() 
+               + res4.rows_affected() + res5.rows_affected() + res6.rows_affected();
+    info!("{} ad hoc collaboration IDs found and labelled", r);
+
+    info!("");    
+    Ok(())
+}
+
+
+/*
+
+// SWOG 
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 193,
+id_type = 'South West Onc. Group ID (US)',
+source_org_id = 100358,
+source_org = 'South West Oncology Group'
+where id_value ~ '^SWOG'
+and (length(id_value) <= 12
+or (id_value ~ 'ICSC$' and length(id_value) <= 16)
+or id_value ~ '-S[0-9]{4}-S[0-9]{4}'
+or id_value ~ '-S[0-9]{4}-[0-9]{4}'
+or id_value ~ '-S[0-9]{4}/S[0-9]{4}')"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 220,
+id_type = 'Ad Hoc Collaboration ID',
+source_org_id = 0,
+source_org = 'Ad hoc Collaboration of research organisations'
+where id_value ~ 'SWOG' 
+and id_type_id is null"#;
+let res1 = execute_sql(sql, pool).await?;
+
+
+// ECOG
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 201,
+id_type = 'ECOG-ACRIN ID (US)',
+source_org_id = 101684,
+source_org = 'Eastern Cooperative Oncology Group / American College of Radiology Imaging Network'
+where id_value ~ 'ECOG-ACRIN'"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 200,
+id_type = 'American Coll. of Radiology Imaging Network ID',
+source_org_id = 104735,
+source_org = 'American College of Radiology Imaging Network'
+where id_value ~ 'ACRIN'
+and (length(id_value) <= 14 or id_value ~ 'RESCUE$')
+and id_type_id is null"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 220,
+id_type = 'Ad Hoc Collaboration ID',
+source_org_id = 0,
+source_org = 'Ad hoc Collaboration of research organisations'
+where id_value ~ 'ACRIN' 
+and id_type_id is null"#;
+let res2 = execute_sql(sql, pool).await?;
+
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 199,
+id_type = 'Eastern Cooperative Onc. Group ID (US)',
+source_org_id = 100428,
+source_org = 'Eastern Cooperative Oncology Group'
+where (id_value ~ '^ECOG' or id_value = 'E8200 ECOG')
+and length(id_value) <= 16 
+and id_value !~ 'RTOG'
+and id_value !~ 'NCIC'
+and id_type_id is null"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 220,
+id_type = 'Ad Hoc Collaboration ID',
+source_org_id = 0,
+source_org = 'Ad hoc Collaboration of research organisations'
+where id_value ~ 'ECOG'
+and id_type_id is null"#;
+let res3 = execute_sql(sql, pool).await?;
+
+-- CALCGB
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 190,
+id_type = 'Cancer & Leukemia GrpB ID (US)',
+source_org_id = 101892,
+source_org = 'Cancer and Leukemia Group B (US)'
+where id_value ~ '^CALGB'
+and (length(id_value) <= 14 
+or (id_value ~ 'ICSC$' and length(id_value) <= 18))"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 220,
+id_type = 'Ad Hoc Collaboration ID',
+source_org_id = 0,
+source_org = 'Ad hoc Collaboration of research organisations'
+where id_value ~ 'CALGB'
+and id_type_id is null"#;
+let res4 = execute_sql(sql, pool).await?;
+
+
+-- CAN-NCIC
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 204,
+id_type = 'National Cancer Inst. of Canada ID',
+source_org_id = 100530,
+source_org = 'NCIC Clinical Trials Group'
+where id_value ~ '^CAN-NCIC'
+and id_value !~ 'GOG'
+and id_type_id is null"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 220,
+id_type = 'Ad Hoc Collaboration ID',
+source_org_id = 0,
+source_org = 'Ad hoc Collaboration of research organisations'
+where id_value ~ 'CAN-NCIC' 
+and id_type_id is null"#;
+let res5 = execute_sql(sql, pool).await?;
+
+
+-- CRTOG
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 205,
+id_type = 'Chinese Radiation Therapy Onc. Group ID',
+source_org_id = 0,
+source_org = 'Chinese Radiation Therapy Oncology Group'
+where id_value ~ 'CRTOG'"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+-- RTOG
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 191,
+id_type = 'Radiation Therapy Onc. Group ID (US)',
+source_org_id = 100525,
+source_org = 'Radiation Therapy Oncology Group (US)'
+where id_value ~ '^RTOG'
+and id_value !~ 'GOG'
+and id_type_id is null"#;
+    execute_sql_fb(sql, _pool, "Korean SWOG", "found and labelled").await?;  
+
+let sql = r#"update ad.temp_idents
+set id_type_id = 220,
+id_type = 'Ad Hoc Collaboration ID',
+source_org_id = 0,
+source_org = 'Ad hoc Collaboration of research organisations'
+where id_value ~ 'RTOG' 
+and id_type_id is null"#;
+let res6 = execute_sql(sql, pool).await?;
+
+
+
+*/
