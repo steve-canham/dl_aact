@@ -2,7 +2,10 @@
 use super::idents_us;
 use super::idents_eu;
 use super::idents_reg;
+use super::idents_ca;
+use super::idents_co;
 use super::idents_oth;
+
 
 use super::utils::{execute_sql, execute_phased_transfer, vacuum_table};
 use super::idents_utils::{transfer_coded_identifiers, execute_temp_phased_transfer, 
@@ -163,25 +166,35 @@ pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgr
         idents_reg::find_latin_american_registry_identities(pool).await?;
         idents_reg::find_other_registry_identities(pool).await?;
         transfer_coded_identifiers(pool).await?;
+
+        idents_ca::find_swog_identities(pool).await?;
+        idents_ca::find_cog_identities(pool).await?;
+        idents_ca::find_can_and_tog_identities(pool).await?;
+        idents_ca::find_nat_identities(pool).await?;
+        idents_ca::find_boog_and_trog_identities(pool).await?;
+        idents_ca::find_gog_and_nrj_identities(pool).await?;
+        transfer_coded_identifiers(pool).await?;
+
+        idents_oth::find_zonmw_identities(pool).await?;
+        idents_oth::find_eortc_identities(pool).await?;
+        idents_oth::find_cruk_identities(pool).await?;
+        idents_oth::find_basel_ctu_identities(pool).await?;
+        idents_oth::find_swiss_basec_identities(pool).await?;
+        idents_oth::find_chinadrugtrials_nmpa_identities(pool).await?;
+        idents_oth::find_daides_identities(pool).await?;
+        idents_oth::find_taiwanese_identities(pool).await?;
+        transfer_coded_identifiers(pool).await?;
+
+        idents_co::find_eli_lilly_identities(pool).await?;
+        transfer_coded_identifiers(pool).await?;
        
         park_spare_idents_data(max_id, chunk_size, pool).await?;
     }
     else {
         reuse_spare_idents_data(max_id, chunk_size, pool).await?;
     }
-
-    idents_oth::find_zonmw_identities(pool).await?;
-    idents_oth::find_eortc_identities(pool).await?;
-    idents_oth::find_cruk_identities(pool).await?;
-    idents_oth::find_basel_ctu_identities(pool).await?;
-    idents_oth::find_swiss_basec_identities(pool).await?;
-    idents_oth::find_chinadrugtrials_nmpa_identities(pool).await?;
-    idents_oth::find_daides_identities(pool).await?;
-    idents_oth::find_eli_lilley_identities(pool).await?;
-    idents_oth::find_taiwanese_identities(pool).await?;
-    idents_oth::find_collab_group_identities(pool).await?;
-
-    transfer_coded_identifiers(pool).await?;
+  
+    //transfer_coded_identifiers(pool).await?;
 
     // Find non registry Ids, e.g. from funders, regulators, registries
 /*
