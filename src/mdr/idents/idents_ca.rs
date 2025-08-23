@@ -1,5 +1,5 @@
-use super::utils::{execute_sql};
-use super::idents_utils::{execute_sql_fb};
+use super::idents_utils::{execute_sql, execute_sql_fb};
+
 
 use sqlx::{Pool, Postgres};
 use crate::AppError;

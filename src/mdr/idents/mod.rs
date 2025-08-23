@@ -1,14 +1,14 @@
 
-use super::idents_us;
-use super::idents_eu;
-use super::idents_reg;
-use super::idents_ca;
-use super::idents_co;
-use super::idents_oth;
-
+mod idents_us;
+mod idents_eu;
+mod idents_rg;
+mod idents_ca;
+mod idents_co;
+mod idents_oth;
+mod idents_utils;
 
 use super::utils::{execute_sql, execute_phased_transfer, vacuum_table};
-use super::idents_utils::{transfer_coded_identifiers, execute_temp_phased_transfer, 
+use idents_utils::{transfer_coded_identifiers, execute_temp_phased_transfer, 
           replace_string_in_ident, remove_both_ldtr_char_from_ident, remove_leading_char_from_ident, 
           switch_number_suffix_to_desc, execute_sql_fb, execute_sql_sfb};
 
@@ -159,12 +159,12 @@ pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgr
         idents_eu::find_isrctn_identities(pool).await?;
         transfer_coded_identifiers(pool).await?;
 
-        idents_reg::find_japanese_registry_identities(pool).await?;
-        idents_reg::find_chinese_registry_identities(pool).await?;
-        idents_reg::find_other_asian_registry_identities(pool).await?;
-        idents_reg::find_middle_eastern_registry_identities(pool).await?;
-        idents_reg::find_latin_american_registry_identities(pool).await?;
-        idents_reg::find_other_registry_identities(pool).await?;
+        idents_rg::find_japanese_registry_identities(pool).await?;
+        idents_rg::find_chinese_registry_identities(pool).await?;
+        idents_rg::find_other_asian_registry_identities(pool).await?;
+        idents_rg::find_middle_eastern_registry_identities(pool).await?;
+        idents_rg::find_latin_american_registry_identities(pool).await?;
+        idents_rg::find_other_registry_identities(pool).await?;
         transfer_coded_identifiers(pool).await?;
 
         idents_ca::find_swog_identities(pool).await?;
@@ -194,7 +194,22 @@ pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgr
         reuse_spare_idents_data(max_id, chunk_size, pool).await?;
     }
   
-    //transfer_coded_identifiers(pool).await?;
+    idents_co::find_incyte_identities(pool).await?;
+    idents_co::find_novartis_identities(pool).await?;
+    idents_co::find_alcon_identities(pool).await?;
+    idents_co::find_pfizer_identities(pool).await?;
+    idents_co::find_gsk_identities(pool).await?;
+    idents_co::find_takeda_identities(pool).await?;
+    idents_co::find_roche_identities(pool).await?;
+    idents_co::find_az_identities(pool).await?;
+    idents_co::find_takeda_identities(pool).await?;
+    idents_co::find_jandj_identities(pool).await?;
+    idents_co::find_jannsen_identities(pool).await?;
+    idents_co::find_sanofi_identities(pool).await?;
+    idents_co::find_bms_identities(pool).await?;
+    idents_co::find_abbvie_identities(pool).await?;
+
+    transfer_coded_identifiers(pool).await?;
 
     // Find non registry Ids, e.g. from funders, regulators, registries
 /*

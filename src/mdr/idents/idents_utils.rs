@@ -1,8 +1,13 @@
-use super::utils;
-
-use sqlx::{Pool, Postgres};
+use sqlx::{Pool, Postgres, postgres::PgQueryResult};
 use crate::AppError;
 use log::info;
+
+
+pub async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResult, AppError> {
+    
+    sqlx::raw_sql(&sql).execute(pool)
+        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))
+}
 
 
 pub async fn execute_sql_fb(sql: &str, pool: &Pool<Postgres>, 
@@ -70,7 +75,7 @@ pub async fn replace_string_in_ident(s1: &str, s2: &str, pool: &Pool<Postgres>) 
     let sql = format!(r#"update ad.temp_idents
         set id_value = replace(id_value, '{}', '{}')
         where id_value like '%{}%'"#, s1, s2, s1);
-    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    let res = execute_sql(&sql, pool).await?.rows_affected();
     if res > 1 {
         info!("{} '{}'s replaced by '{}' in identifiers", res, s1, s2);
     }
@@ -86,7 +91,7 @@ pub async fn remove_leading_char_from_ident(s: char, pool: &Pool<Postgres>) -> R
     let sql = format!(r#"update ad.temp_idents
         set id_value = trim(LEADING '{}' from id_value)
         where id_value like '{}%'"#, s, s);
-    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    let res = execute_sql(&sql, pool).await?.rows_affected();
     if res > 1 {
         info!("{} '{}' characters removed from start of identifiers", res, s);
     }
@@ -102,7 +107,7 @@ pub async fn remove_both_ldtr_char_from_ident(s: char, pool: &Pool<Postgres>) ->
     let sql = format!(r#"update ad.temp_idents
         set id_value = trim(BOTH '{}' from id_value)
         where id_value like '%{}' or id_value like '{}%'"#, s, s, s);
-    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    let res = execute_sql(&sql, pool).await?.rows_affected();
     if res > 1 {
         info!("{} '{}' characters removed from start or end of identifiers", res, s);
     }
@@ -121,7 +126,7 @@ let sql = format!(r#"update ad.temp_idents
                 end,
             id_value = trim(replace (id_value, '{s}', ''))
             where id_value ~ '{s}$'"#);
-    let res = utils::execute_sql(&sql, pool).await?.rows_affected();
+    let res = execute_sql(&sql, pool).await?.rows_affected();
     if res > 1 {
         info!("{} '{}' suffixes moved from id_value to id type description", res, s);
     }
@@ -138,7 +143,7 @@ pub async fn transfer_coded_identifiers(pool: &Pool<Postgres>) -> Result<(), App
                              select sd_sid, id_value, id_type_id, id_type, source_org_id, source_org, id_link 
                              from ad.temp_idents 
                              where id_type_id is not null "#;   
-    utils::execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"delete from ad.temp_idents 
                              where id_type_id is not null "#;   

@@ -1,21 +1,11 @@
 mod studies;
-
 mod idents;
-mod idents_reg;
-mod idents_us;
-mod idents_eu;
-mod idents_ca;
-mod idents_co;
-mod idents_oth;
-mod idents_utils;
-
 mod locs;
 mod peoporgs;
 mod keywords;
 mod links;
 mod dataobjs;
 mod utils;
-
 
 use sqlx::{Pool, Postgres};
 use crate::AppError;
@@ -39,7 +29,7 @@ pub async fn do_mdr_import(_data_date: &str, pool: &Pool<Postgres>) -> Result<()
     //studies::build_studies_table(pool).await?;
    
     //idents::build_titles_table(pool).await?;
-    let idents_processing = "full";
+    let idents_processing = "reuse";
 
     idents::build_idents_table(pool).await?;
 
