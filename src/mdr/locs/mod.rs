@@ -1,4 +1,8 @@
-use super::utils;
+mod locs_utils;
+mod locs_proc;
+
+use super::utils::{execute_sql, execute_phased_transfer, vacuum_table};
+use locs_utils::{execute_temp_phased_transfer};
 
 use sqlx::{Pool, Postgres};
 use crate::AppError;
@@ -27,7 +31,7 @@ pub async fn build_locations_table (pool: &Pool<Postgres>) -> Result<(), AppErro
     );
     CREATE INDEX study_locations_sid ON ad.study_locations(sd_sid);"#;
 
-	utils::execute_sql(sql, pool).await?;
+	execute_sql(sql, pool).await?;
     info!("study locations table (re)created");
     
     Ok(())
@@ -40,7 +44,7 @@ pub async fn build_countries_table (pool: &Pool<Postgres>) -> Result<(), AppErro
     let sql = r#"SET client_min_messages TO WARNING; 
     DROP TABLE IF EXISTS ad.study_countries;
     CREATE TABLE ad.study_countries(
-        id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
+      id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
     , sd_sid                 VARCHAR         NOT NULL
     , country_id             INT             NULL
     , country_name           VARCHAR         NULL
@@ -50,12 +54,227 @@ pub async fn build_countries_table (pool: &Pool<Postgres>) -> Result<(), AppErro
     );
     CREATE INDEX study_countries_sid ON ad.study_countries(sd_sid);"#;
 
-	utils::execute_sql(sql, pool).await?;
+	execute_sql(sql, pool).await?;
     info!("study countries table (re)created");
     
     Ok(())
 
 }
+
+pub async fn build_locs_table (pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    /*  
+    fac_orig - the original facility name in the source data
+    fac_proc - the facil;ity name after initial linguistic processing to make it moert consistent
+    fac_code - any included site id
+    fac_name - the name after the removal of the fac_code and some further processing
+    fac_org - the underlying organisation, where identification is possible
+    fac_echo - a value to be returned to the client system, for a more consistent display
+    */
+
+    let sql = r#"SET client_min_messages TO WARNING; 
+    DROP TABLE IF EXISTS ad.locs;
+    CREATE TABLE ad.locs(
+      id                     INT             PRIMARY KEY GENERATED ALWAYS AS IDENTITY (start with 10000001 increment by 1)
+    , sd_sid                 VARCHAR         NOT NULL
+    , fac_orig               VARCHAR         NULL
+    , fac_proc               VARCHAR         NULL
+    , fac_code               VARCHAR         NULL
+    , fac_name               VARCHAR         NULL
+    , fac_org                VARCHAR         NULL
+    , fac_echo               VARCHAR         NULL
+    , for_match              BOOL            NULL
+    , city                   VARCHAR         NULL
+    , state                  VARCHAR         NULL
+    , country                VARCHAR         NULL
+    , status                 VARCHAR         NULL
+    );
+    CREATE INDEX locs_fac_proc ON ad.locs(fac_proc);"#;
+
+	execute_sql(sql, pool).await?;
+    info!("study locs table (re)created");
+    
+    Ok(())
+
+}
+
+pub async fn load_facs_data (processing: &str, max_id: u64, pool: &Pool<Postgres>) -> Result<(), AppError> {  
+
+    let chunk_size = 1000000;
+
+    if processing == "full" {
+
+        build_locs_table(pool).await?;
+
+        // Insert the loc data from the ctgov.facilties table.
+        
+        let sql = r#"insert into ad.locs(sd_sid, fac_orig, fac_proc, city, state, country, status)
+                                select nct_id, coalesce(name, 'Site not specified'), 
+                                coalesce(name, 'Site not specified'), city, state, country, status
+                                from ctgov.facilities c
+                                where (status <> 'WITHDRAWN' or status is null) "#;
+
+        execute_phased_transfer(sql, max_id, chunk_size, " and ", "nct ids", "ad.locs", pool).await?;
+
+        locs_proc::regularise_brackets(pool).await?;
+        locs_proc::remove_enclosing_brackets(pool).await?;
+        locs_proc::repair_non_ascii(pool).await?;
+        
+        locs_proc::remove_double_quotes(pool).await?;
+        locs_proc::remove_single_quotes(pool).await?;
+        locs_proc::remove_double_commas(pool).await?;
+        locs_proc::process_apostrophes(pool).await?;
+        locs_proc::process_upper_ticks(pool).await?;
+        
+        locs_proc::remove_leading_trailing_odd_chars(pool).await?;
+        locs_proc::remove_underscores(pool).await?;
+        locs_proc::improve_comma_spacing(pool).await?;
+        locs_proc::improve_bracket_spacing(pool).await?;
+
+        locs_proc::regularise_word_site(pool).await?;
+        locs_proc::correct_place_names(pool).await?;
+        locs_proc::remove_initial_numbering(pool).await?;
+        locs_proc::correct_lower_case_beginnings(pool).await?;
+        locs_proc::regularise_word_research(pool).await?;
+        locs_proc::regularise_word_investigation(pool).await?;
+        locs_proc::regularise_word_university(pool).await?;
+        locs_proc::regularise_word_others(pool).await?;
+        locs_proc::remove_upper_case_institut(pool).await?;
+       
+        park_spare_locs_data(max_id, chunk_size, pool).await?;
+    }
+    else {
+        reuse_spare_locs_data(max_id, chunk_size, pool).await?;
+    }
+  
+
+
+
+    vacuum_table("locs", pool).await?;
+
+    
+    //let _sql = r#"drop table if exists ad.temp_idents;"#;
+    // execute_sql(sql, pool).await?;
+
+    //vacuum_table("study_locations", pool).await?;
+
+    Ok(())
+
+}
+
+
+async fn park_spare_locs_data(max_id: u64, chunk_size: u64, pool: &Pool<Postgres>) -> Result<(), AppError> { 
+ 
+    // copy ad.locs to ad.spare_locs
+
+    let sql = r#"SET client_min_messages TO WARNING; 
+    drop table if exists ad.spare_locs;
+    CREATE TABLE ad.spare_locs(
+      id                     INT             PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY (start with 10000001 increment by 1)
+    , sd_sid                 VARCHAR         NOT NULL
+    , fac_orig               VARCHAR         NULL
+    , fac_proc               VARCHAR         NULL
+    , fac_code               VARCHAR         NULL
+    , fac_name               VARCHAR         NULL
+    , fac_org                VARCHAR         NULL
+    , fac_echo               VARCHAR         NULL
+    , for_match              BOOL            NULL
+    , city                   VARCHAR         NULL
+    , state                  VARCHAR         NULL
+    , country                VARCHAR         NULL
+    , status                 VARCHAR         NULL
+    );
+    CREATE INDEX spare_locs_fac_proc ON ad.spare_locs(fac_proc);"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"insert into ad.spare_locs (id, sd_sid,fac_orig, fac_proc, fac_code, 
+    fac_name, fac_org, fac_echo, for_match, city, state, country, status)
+    select id, sd_sid,fac_orig, fac_proc, fac_code, 
+    fac_name, fac_org, fac_echo, for_match, city, state, country, status 
+    from ad.locs c "#;
+    execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "ad.locs", pool).await?;
+    
+    let sql = r#"SET client_min_messages TO NOTICE;"#;
+    execute_sql(sql, pool).await?;
+    
+    Ok(())
+
+}
+
+
+async fn reuse_spare_locs_data(max_id: u64, chunk_size: u64, pool: &Pool<Postgres>) -> Result<(), AppError> { 
+
+    // Load the data from ad.spare_locs to ad.locs
+
+    let sql = r#"SET client_min_messages TO WARNING; 
+	drop table if exists ad.locs;
+	CREATE TABLE ad.locs(
+      id                     INT             PRIMARY KEY GENERATED BY DEFAULT AS IDENTITY (start with 10000001 increment by 1)
+    , sd_sid                 VARCHAR         NOT NULL
+    , fac_orig               VARCHAR         NULL
+    , fac_proc               VARCHAR         NULL
+    , fac_code               VARCHAR         NULL
+    , fac_name               VARCHAR         NULL
+    , fac_org                VARCHAR         NULL
+    , fac_echo               VARCHAR         NULL
+    , for_match              BOOL            NULL
+    , city                   VARCHAR         NULL
+    , state                  VARCHAR         NULL
+    , country                VARCHAR         NULL
+    , status                 VARCHAR         NULL
+    );
+    CREATE INDEX locs_fac_proc ON ad.locs(fac_proc);"#;
+    execute_sql(sql, pool).await?;
+
+    let sql = r#"insert into ad.locs (id, sd_sid,fac_orig, fac_proc, fac_code, 
+    fac_name, fac_org, fac_echo, for_match, city, state, country, status)
+    select id, sd_sid,fac_orig, fac_proc, fac_code, 
+    fac_name, fac_org, fac_echo, for_match, city, state, country, status
+    from ad.spare_locs c "#;
+    execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "ad.spare_locs", pool).await?;
+
+    Ok(())
+}
+
+
+
+/* 
+async fn create_copy_of_facilities(max_id: u64, chunk_size: u64, pool: &Pool<Postgres>) -> Result<(), AppError> { 
+
+    let sql = r#"SET client_min_messages TO WARNING; 
+	drop table if exists ad.temp_idents;
+	create table ad.temp_idents
+	(
+          id                     INT             NOT NULL GENERATED BY DEFAULT AS IDENTITY
+		, sd_sid                 VARCHAR         NOT NULL
+        , id_value               VARCHAR         NULL
+        , id_type_id             INT             NULL
+        , id_type                VARCHAR         NULL
+        , source_org_id          INT             NULL
+        , source_org             VARCHAR         NULL
+        , id_class               VARCHAR         NULL
+        , id_desc                VARCHAR         NULL
+        , id_link                VARCHAR         NULL
+	);
+    CREATE INDEX temp_idents_id ON ad.temp_idents(id);
+    CREATE INDEX temp_idents_sid ON ad.temp_idents(sd_sid);"#;
+    execute_sql(sql, pool).await?;
+
+	let sql = r#"insert into ad.temp_idents (id, sd_sid, id_value, id_class, id_desc, id_link)
+	select id, nct_id, id_value, id_type, id_type_description, id_link
+	from ctgov.id_information c where id_source <> 'nct_alias' "#;
+
+    execute_phased_transfer(sql, max_id, chunk_size, " and ", 
+        "ctgov identifier records", "ad.temp_idents", pool).await?;
+
+    let sql = r#"SET client_min_messages TO NOTICE;"#;
+    execute_sql(sql, pool).await?;
+    
+    Ok(())
+
+}
+*/
+
 /*
 
 
@@ -586,10 +805,6 @@ order by length(substring(city_name, 1, strpos(city_name, ' cedex') ))
 -- Pekin	Illinois	United States 4905599
 -- Taipei City		Taiwan	  Add to Taipei (also Taipei, Taiwan / taipei County)
 -- Camperdown	New South Wales	Australia 2172563
-
-
-
-
 
 
 

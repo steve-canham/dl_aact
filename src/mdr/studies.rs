@@ -1,4 +1,3 @@
-/*
 use super::utils;
 
 use sqlx::{Pool, Postgres};
@@ -58,7 +57,7 @@ pub async fn build_studies_table (pool: &Pool<Postgres>) -> Result<(), AppError>
 pub async fn load_studies_data (data_date: &str, max_id: u64, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     let chunk_size = 2000000;
-    let rec_num = utils::execute_phased_transfer(core_study_data_sql(), max_id, chunk_size, " where ", "core study records", pool).await?;
+    let rec_num = utils::execute_phased_transfer(core_study_data_sql(), max_id, chunk_size, " where ", "core study records", "ad.studies", pool).await?;
 
 	let chunk_size = 150000;
     utils::execute_phased_update(registries_update_sql(), rec_num, chunk_size, "registries identified", pool).await?;
@@ -395,4 +394,4 @@ fn max_date_sql (data_date: &str) -> String {
 	set dt_of_data = '{}'
 	where id > 1 "#, data_date)
 }
-*/
+

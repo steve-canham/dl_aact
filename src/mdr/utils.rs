@@ -8,23 +8,6 @@ pub async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResu
         .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))
 }
 
-/* 
-pub async fn execute_sql_fb(sql: &str, pool: &Pool<Postgres>, 
-            s1: &str, s2: &str) -> Result<(), AppError> {
-    
-    let res = sqlx::raw_sql(&sql).execute(pool)
-        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
-
-    if res.rows_affected() > 1 {
-        info!("{} {} identifiers {}", res.rows_affected(), s1, s2);
-    }
-    else {
-        info!("{} {} identifier {}", res.rows_affected(), s1, s2);
-    }
-    
-    Ok(())
-}
-*/
 
 pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sql_linker: &str, rec_type: &str, rec_dest: &str, pool: &Pool<Postgres>) -> Result<u64, AppError> {
     
@@ -53,7 +36,6 @@ pub async fn execute_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sq
 }
 
 
-/* 
 pub async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fback: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
 
     let mut total_recs = 0;
@@ -79,7 +61,7 @@ pub async fn execute_phased_update(sql: &str, rec_num: u64, chunk_size: u64, fba
 
     Ok(())
 }
-*/
+
 
 
 pub async fn vacuum_table (table: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {  

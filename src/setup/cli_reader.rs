@@ -82,7 +82,7 @@
             .short('a')
             .long("all")
             .required(false)
-            .help("A flag signifying importing of all data")
+            .help("A flag signifying import all data")
             .action(clap::ArgAction::SetTrue)
          )
          .arg(
@@ -90,7 +90,7 @@
             .short('m')
             .long("mdr-data")
             .required(false)
-            .help("A flag signifying importing of traditional mdr data - excludes iec data")
+            .help("A flag signifying import traditional mdr data - excludes iec data")
             .action(clap::ArgAction::SetTrue)
          )
          .arg(
@@ -98,7 +98,7 @@
             .short('e')
             .long("iec-data")
             .required(false)
-            .help("A flag signifying importing of iec data")
+            .help("A flag signifying import iec data")
             .action(clap::ArgAction::SetTrue)
          )
          .arg(

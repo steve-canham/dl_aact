@@ -1,5 +1,5 @@
 
-** restore commands adapted from https://aact.ctti-clinicaltrials.org/snapshots
+** restore commands adapted from https://aact.ctti-clinicaltrials.org/downloads
 
 Restoring the full AACT database
 

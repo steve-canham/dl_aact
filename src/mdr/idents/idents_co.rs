@@ -79,7 +79,7 @@ pub async fn find_novartis_identities(pool: &Pool<Postgres>) -> Result<(), AppEr
         source_org_id = 100189,
         source_org = 'Novartis'
         from ctgov.sponsors s
-        where a.sd_sid = s.snct_id
+        where a.sd_sid = s.nct_id
         and (a.id_value ~ '^C[A-Z]{3}[A-Z0-9]{8,10}'
             or a.id_value ~ '^[0-9]{3}(-| )(P|A|D|G)(-| )[0-9]{3}'
             or a.id_value ~ '^V[0-9]{2}'
@@ -200,9 +200,6 @@ pub async fn find_pfizer_identities(pool: &Pool<Postgres>) -> Result<(), AppErro
     execute_sql_fb(sql, pool, "Pfizer study", "found and labelled").await?;  
  
     
-
-
-
     info!("");   
     Ok(())
 }

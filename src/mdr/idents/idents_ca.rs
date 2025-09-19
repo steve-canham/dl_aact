@@ -12,7 +12,7 @@ pub async fn find_swog_identities(pool: &Pool<Postgres>) -> Result<(), AppError>
     // SQL relies on identifying those records that have notr yet been identified.
     // Therefore exercise caution if changing the given order.
 
-    // CSWOG - test change
+    // CSWOG
 
     let sql = r#"update ad.temp_idents
         set id_type_id = 195,

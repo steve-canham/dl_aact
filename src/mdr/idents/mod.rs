@@ -17,7 +17,6 @@ use crate::AppError;
 use log::info;
 
 
-/* 
 pub async fn build_titles_table (pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     let sql = r#"SET client_min_messages TO WARNING; 
@@ -34,12 +33,12 @@ pub async fn build_titles_table (pool: &Pool<Postgres>) -> Result<(), AppError> 
     );
     CREATE INDEX study_titles_sid ON ad.study_titles(sd_sid);"#;
 
-	 execute_sql(sql, pool).await?;
+	execute_sql(sql, pool).await?;
     info!("study titles table (re)created");
     Ok(())
 
 }
-*/
+
 
 pub async fn build_idents_table (pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
@@ -69,8 +68,7 @@ pub async fn build_idents_table (pool: &Pool<Postgres>) -> Result<(), AppError> 
 
 }
 
-
-/* 
+ 
 pub async fn load_titles_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     let chunk_size = 2000000;
@@ -80,28 +78,27 @@ pub async fn load_titles_data (max_id: u64, pool: &Pool<Postgres>) -> Result<(),
     let sql = r#"insert into ad.study_titles (sd_sid, title_type_id, title_text, is_default, comments)
         select nct_id, 15, brief_title, true, 'brief title in clinicaltrials.gov'
         from ctgov.studies c "#;
-
-    execute_phased_transfer(sql, max_id, chunk_size, " where ", "brief titles added", pool).await?;
+    execute_phased_transfer(sql, max_id, chunk_size, " where ", "brief titles added", "ad.study_titles", pool).await?;
 
     let sql = r#"insert into ad.study_titles (sd_sid, title_type_id, title_text, is_default, comments)
         select nct_id, 16, official_title, false, 'official title in clinicaltrials.gov'
         from ctgov.studies c
         where c.official_title is not null and c.official_title <> c.brief_title "#;
 
-    execute_phased_transfer(sql, max_id, chunk_size, " and ", "oficial titles added", pool).await?;
+    execute_phased_transfer(sql, max_id, chunk_size, " and ", "oficial titles added", "ad.study_titles", pool).await?;
 
     let sql = r#"insert into ad.study_titles (sd_sid, title_type_id, title_text, is_default)
         select nct_id, 14, acronym, false
         from ctgov.studies c 
         where acronym is not null "#;
 
-    execute_phased_transfer(sql, max_id, chunk_size, " and ", "acronyms added", pool).await?;
+    execute_phased_transfer(sql, max_id, chunk_size, " and ", "acronyms added", "ad.study_titles", pool).await?;
     vacuum_table("study_titles", pool).await?;
 
     Ok(())
 
 }
-*/
+
 
 
 pub async fn load_idents_data (processing: &str, max_id: u64, pool: &Pool<Postgres>) -> Result<(), AppError> {  
@@ -250,7 +247,7 @@ async fn park_spare_idents_data(max_id: u64, chunk_size: u64, pool: &Pool<Postgr
     );
     CREATE INDEX spare_temp_idents_id ON ad.spare_temp_idents(id);
     CREATE INDEX spare_temp_idents_sid ON ad.spare_temp_idents(sd_sid);"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"insert into ad.spare_temp_idents (id, sd_sid, id_value, id_class, id_desc, id_link)
     select id, sd_sid, id_value, id_class, id_desc, id_link
@@ -276,7 +273,7 @@ async fn park_spare_idents_data(max_id: u64, chunk_size: u64, pool: &Pool<Postgr
         , coded_on               TIMESTAMPTZ     NULL                                     
         );
         CREATE INDEX spare_study_identifiers_sid ON ad.spare_study_identifiers(sd_sid);"#;
-       execute_sql(sql, pool).await?;
+        execute_sql(sql, pool).await?;
 
     let sql = r#"insert into ad.spare_study_identifiers (id, sd_sid, id_value, 
         id_type_id, id_type, source_org_id, source_org, source_ror_id, id_date, 
@@ -287,7 +284,7 @@ async fn park_spare_idents_data(max_id: u64, chunk_size: u64, pool: &Pool<Postgr
     execute_temp_phased_transfer(sql, max_id, chunk_size, " where ", "study_identifiers", pool).await?;
 
     let sql = r#"SET client_min_messages TO NOTICE;"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     Ok(())
 
@@ -422,7 +419,7 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         from ad.temp_idents
         where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"insert into ad.temp_idents
         (id, sd_sid, id_value, id_class, id_desc)
@@ -430,7 +427,7 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         from ad.temp_idents
         where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"delete from ad.temp_idents
         where id_value ~ '; ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
@@ -445,7 +442,7 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         from ad.temp_idents
         where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"insert into ad.temp_idents
         (id, sd_sid, id_value, id_class, id_desc)
@@ -453,7 +450,7 @@ async fn split_doubled_values(pool: &Pool<Postgres>) -> Result<(), AppError> {
         from ad.temp_idents
         where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
         and id_value ~ '[0-9]{4}-[0-9]{5}';"#;
-   execute_sql(sql, pool).await?;
+    execute_sql(sql, pool).await?;
 
     let sql = r#"delete from ad.temp_idents
         where id_value ~ ', ?[a-z]{2}(1|2)[0-9]{1}[A-Za-z1-7]+$'
@@ -557,7 +554,6 @@ async fn remove_obvious_non_identifiers(pool: &Pool<Postgres>) -> Result<(), App
         or id_value ilike '%87654321%';"#;
     execute_sql_fb(sql, pool, "dummy", "(e.g. all 0s, or obvious sequences) removed").await?;
    
-
     // Remove those that are too small to be useful (unless type is given).
 
     let sql = r#"delete from ad.temp_idents 
@@ -1156,37 +1152,3 @@ async fn code_very_short_unidentifiable_ids(pool: &Pool<Postgres>) -> Result<(),
     info!("");
     Ok(())
 }
-
-
-/*
-
-async fn find_other_identities(pool: &Pool<Postgres>) -> Result<(), AppError> {  
-
-    // NCI CTEP - NEEDS REDOING  TO IDENTIFY INDIVIDUAL COLLAB GROUPS
-
-    let sql = r#"update ad.temp_idents
-        set id_type_id = 175,
-        id_type = 'CTEP Number',
-        source_org_id = 100162,
-        source_org = 'National Cancer Institute'
-        where id_desc ~ 'CTEP'"#;
-
-    let res = execute_sql(sql, pool).await?;
-    info!("{} NCI CTEP identifiers found and labelled", res.rows_affected());	
-
-        
-    let sql = r#"update ad.temp_idents
-        set id_type_id = 170,
-        id_type = 'NCI PDQ ID',
-        source_org_id = 100162,
-        source_org = 'National Cancer Institute'
-        where id_value ~ '^CAN-NCIC'
-        and length(id_value) < 18 ;"#;
-
-    let res2 = execute_sql(sql, pool).await?;
- 
-    info!("");
-    Ok(())
-}
-
-*/
