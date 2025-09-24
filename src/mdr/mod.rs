@@ -119,7 +119,7 @@ pub async fn do_mdr_import(data_date: &str, pool: &Pool<Postgres>) -> Result<(),
 
     if import_locations {
         locs::build_locations_table(pool).await?;
-        let locs_processing = "full";
+        let locs_processing = "reuse";
         locs::load_facs_data (locs_processing, max_id, pool).await?;
     }
 

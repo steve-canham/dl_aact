@@ -1,20 +1,30 @@
-use super::locs_utils::{replace_like_in_fac_proc_fb, replace_regex_in_fac_proc, replace_regex_in_fac_proc_fb, execute_sql};
+use super::locs_utils::{replace_like_in_fac_proc, replace_regex_in_fac_proc, execute_sql,
+                        replace_in_fac_proc, remove_leading_char_in_fac_proc, 
+                        remove_trailing_char_in_fac_proc};
 
 use sqlx::{Pool, Postgres};
 use crate::AppError;
 use log::info;
 
 
-pub async fn regularise_brackets(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+pub async fn do_section_header() -> Result<(), AppError> {  
     
-    replace_like_in_fac_proc_fb( "[", "(", pool).await?;
-    replace_like_in_fac_proc_fb( "]", ")", pool).await?;
-    replace_like_in_fac_proc_fb( "{", "(", pool).await?;
-    replace_like_in_fac_proc_fb( "}", ")", pool).await?;
+    info!("------------------------------------------------------------------");
+    info!(" Editing the fac_proc field for greater clarity and consistency");
+    info!("------------------------------------------------------------------");
     info!("");
     Ok(())
 }
 
+pub async fn regularise_brackets(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    replace_like_in_fac_proc( "[", "(", pool, true).await?;
+    replace_like_in_fac_proc( "]", ")", pool, true).await?;
+    replace_like_in_fac_proc( "{", "(", pool, true).await?;
+    replace_like_in_fac_proc( "}", ")", pool, true).await?;
+    info!("");
+    Ok(())
+}
 
 pub async fn remove_enclosing_brackets(pool: &Pool<Postgres>) -> Result<(), AppError> {  
         
@@ -23,306 +33,500 @@ pub async fn remove_enclosing_brackets(pool: &Pool<Postgres>) -> Result<(), AppE
 	where fac_proc ~ '^\(.+\)$' and fac_proc !~ '^\(.+\(.+\)$'; "#;
     
     let res = execute_sql(sql, pool).await?;
-    info!("Enclosing brackets removed from {} records", res.rows_affected());
+    info!("{} records had enclosing brackets removed", res.rows_affected());
     info!("");
     Ok(())
 }
 
+pub async fn repair_non_ascii_1(pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
-pub async fn repair_non_ascii(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    info!(" Replacing non-utf with utf equivalents...");
+    info!("");
+
+    // Start by clearing the decks by removing these (apparently) redundant codes
+
+    replace_regex_in_fac_proc( "â€�", "", pool, true).await?;
+    replace_regex_in_fac_proc( "ï€£3", "", pool, true).await?;
+
+    // Then do the following replacements, involving '�', often standing in
+    // for several letters as well as different letters in different contexts
+   
+	replace_regex_in_fac_proc("Center �� Carmichael", "Center Carmichael", pool, true).await?;
+	replace_regex_in_fac_proc("Zak��ad", "Zakład", pool, true).await?;
+	replace_regex_in_fac_proc("H�pital", "Hôpital", pool, true).await?;
+	replace_regex_in_fac_proc("Universit�Tsklinikum", "Universitätsklinikum", pool, true).await?;
+	replace_regex_in_fac_proc("Investigaci�n Cl�nica", "Investigación Clínica", pool, true).await?;
+	replace_regex_in_fac_proc("Centre L� B�rd", "Centre Léon Bérard", pool, true).await?;
+	replace_regex_in_fac_proc("Universit�Tsmedizin", "Universitätsmedizin", pool, true).await?;
+	replace_regex_in_fac_proc("C�te", "Côte", pool, true).await?;
+	
+    replace_regex_in_fac_proc("Besan�on", "Besançon", pool, true).await?;
+	replace_regex_in_fac_proc("D�Hebron", "D’Hebron", pool, true).await?;
+	replace_regex_in_fac_proc("H�al Saint-Antoine", "Hôpital Saint-Antoine", pool, true).await?;
+	replace_regex_in_fac_proc("H�Pital Universitaire Piti�-Salp�Tri�Re", "Hôpital Universitaire Pitié-Salpêtrière", pool, true).await?;
+	replace_regex_in_fac_proc("Pitie-Salpetri�re", "Pitié-Salpêtrière", pool, true).await?;
+	replace_regex_in_fac_proc("Antoine Becl�re", "Antoine-Béclère", pool, true).await?;
+	replace_regex_in_fac_proc("Servi�os", "Serviços", pool, true).await?;
+	replace_regex_in_fac_proc("SE�Ra", "Señora", pool, true).await?;
+
+	replace_regex_in_fac_proc("H�tel", "Hôtel", pool, true).await?;
+	replace_regex_in_fac_proc("General Yag�", "General Yagüe", pool, true).await?;
+	replace_regex_in_fac_proc("Gregorio Mara�on", "Gregorio Marañón", pool, true).await?;
+	replace_regex_in_fac_proc("Est�ca do", "Estética do", pool, true).await?;
+	replace_regex_in_fac_proc("\"Dermed�", "\"Dermed", pool, true).await?;
+	replace_regex_in_fac_proc("Spitalul Jude�ean de Urgen�a dr. Constantin Opri�", "Spitalul Judeţean de Urgenţă Dr.Constantin Opriş", pool, true).await?;
+	replace_regex_in_fac_proc("zaboliavania�", "zaboliavania", pool, true).await?;
+    replace_regex_in_fac_proc("�L. E A. Ser�Gnoli�", "L. e A. Seragnoli", pool, true).await?;
+
+    // Question marks in name demand slightly different tack
+    replace_like_in_fac_proc("Szpitale Wojew�Dzkie W Gdyni Sp�?Ka Z Ograniczon? Odpowiedzialno?Ci?", "Szpitale Wojewódzkie w Gdyni Sp. z o.o", pool, true).await?;  
+
+    info!("");
+    Ok(())
+}
+
+pub async fn repair_non_ascii_2(pool: &Pool<Postgres>) -> Result<(), AppError> {  
 
     // A few strange ones need to be dealt with individually
 
-    replace_regex_in_fac_proc( "Ã-rebro", "Örebro", pool).await?;
-    replace_regex_in_fac_proc( " CittÃ", " Città", pool).await?;
-    replace_regex_in_fac_proc( " UnitÃ", " Unità", pool).await?;
-    replace_regex_in_fac_proc( "RenÃ LaÃnnec", "René Laënnec", pool).await?;
-    replace_regex_in_fac_proc( "LaÃnnec", "Laënnec", pool).await?;
-
-    info!("5 Singleton replacements made for non-ascii to utf repairs");
-
-    replace_regex_in_fac_proc( " CatalÃ", " Català", pool).await?;
-    replace_regex_in_fac_proc( "Son LlÃ tzer", "Son Llàtzer", pool).await?;
-    replace_regex_in_fac_proc( "Ã OK", "Á OK", pool).await?;
-    replace_regex_in_fac_proc( "ParkinsonÃÂ¿s", "Parkinson’s", pool).await?;
-    replace_regex_in_fac_proc( "OncologÃƒÂ-a", "Oncología", pool).await?;
-
-    info!("5 Singleton replacements made for non-ascii to utf repairs");
-
-    replace_regex_in_fac_proc( "LÃon BÃrard Centre RÃgional", "Léon Bérard Centre Régional", pool).await?;
-    replace_regex_in_fac_proc( "GraubÃnden", "Graubünden", pool).await?;
-    replace_regex_in_fac_proc( "Fundaã§Ã£O", "Fundação", pool).await?;
-
-    info!("3 Singleton replacements made for non-ascii to utf repairs");
+    replace_regex_in_fac_proc( "Ã-rebro", "Örebro", pool, true).await?;
+    replace_regex_in_fac_proc( " CittÃ", " Città", pool, true).await?;
+    replace_regex_in_fac_proc( " UnitÃ", " Unità", pool, true).await?;
+    replace_regex_in_fac_proc( "LaÃnnec", "Laënnec", pool, true).await?;
+    replace_regex_in_fac_proc( "LaÃ\"nnec", "Laënnec", pool, true).await?;
     
-    // Then do these - a few for each of them
-	
-    replace_regex_in_fac_proc_fb( "Ã©", "é", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã´", "ô", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã¨", "è", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã-", "í", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã§", "ç", pool).await?;
-    replace_regex_in_fac_proc_fb( "ã§", "ç", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã£", "ã", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã¡", "á", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã¶", "ö", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã¤", "ä", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã³", "ó", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã¼", "ü", pool).await?;
-    replace_regex_in_fac_proc_fb( "ã¼", "ü", pool).await?;
-    replace_regex_in_fac_proc_fb( "ÃŸ", "ß", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã±", "ñ", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ãª", "ê", pool).await?;
-    replace_regex_in_fac_proc_fb( "Ã¢", "â", pool).await?;
+    replace_regex_in_fac_proc( " CatalÃ", " Català", pool, true).await?;
+    replace_regex_in_fac_proc( "Son LlÃ tzer", "Son Llàtzer", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã OK", "Á OK", pool, true).await?;
+    replace_regex_in_fac_proc( "ParkinsonÃÂ¿s", "Parkinson’s", pool, true).await?;
+    replace_regex_in_fac_proc( "OncologÃƒÂ-a", "Oncología", pool, true).await?;
+    replace_regex_in_fac_proc( "LÃon BÃrard Centre RÃgional", "Léon Bérard Centre Régional", pool, true).await?;
+    replace_regex_in_fac_proc( "GraubÃnden", "Graubünden", pool, true).await?;
+    replace_regex_in_fac_proc( "Fundaã§Ã£O", "Fundação", pool, true).await?;
+    replace_regex_in_fac_proc( "RenÃ ", "René ", pool, true).await?;
+    replace_regex_in_fac_proc( "Presidentâ€™s ", "President’s ", pool, true).await?;
+    replace_regex_in_fac_proc( "Oâ€™Neil", "O’Neil", pool, true).await?;
+    replace_regex_in_fac_proc( "Marii SkÅ''odowskiej-Curie â€\" PaÅ\"stwowy Instytut", "Marii Skłodowskiej-Curie, Państwowy Instytut", pool, true).await?;
+    replace_regex_in_fac_proc( "Researchâ€\" ", "Research, ", pool, true).await?;
+    replace_regex_in_fac_proc( "the â€œHealth", "the Health", pool, true).await?;
+    replace_regex_in_fac_proc( " â€œ", ", ", pool, true).await?;
+    replace_regex_in_fac_proc( " â€\" ", ", ", pool, true).await?;
+
     info!("");
 
-    Ok(())
-
-}
-    
-
-pub async fn  remove_double_quotes(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    /* 
-    update ad.locs
-	set fac_proc = replace(fac_proc, '"', '') where fac_proc like '%"%';  
-	update ad.locs
-	set fac_proc = replace(fac_proc, '&#34;', '') where fac_proc like '%&#34;%';  
-	update ad.locs
-	set fac_proc = replace(fac_proc, '''''', '') where fac_proc like '%''''%';
-    */
-
-    Ok(())
-}
-
-
-pub async fn remove_single_quotes(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    /* 
-    update ad.locs
-	set fac_proc = replace(fac_proc, '&quot;', '') where fac_proc like '%&quot;%'; 
-	update ad.locs
-	set fac_proc = replace(fac_proc, '&amp;', '&') where fac_proc like '%&amp;%'; 
+    // Then do these - a few for each of them
 	
-	-- The update below has to be done a second time
-	update ad.locs
-	set fac_proc = replace(fac_proc, '&amp;', '&') where fac_proc like '%&amp;%'; 
-	update ad.locs
-	set fac_proc = replace(fac_proc, '&#39;', '’') where fac_proc like '%&#39;%'; 
+    replace_regex_in_fac_proc( "Ã©", "é", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã´", "ô", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã¨", "è", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã-", "í", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã§", "ç", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã£", "ã", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã¡", "á", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã¶", "ö", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã¤", "ä", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã³", "ó", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã¼", "ü", pool, true).await?;
+    replace_regex_in_fac_proc( "ã¼", "ü", pool, true).await?;
+    replace_regex_in_fac_proc( "ÃŸ", "ß", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã±", "ñ", pool, true).await?;
+    replace_regex_in_fac_proc( "Ãª", "ê", pool, true).await?;
+    replace_regex_in_fac_proc( "Ã¢", "â", pool, true).await?;
+    
+    info!("");
+    Ok(())
+}
+    
+pub async fn repair_non_ascii_3(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    replace_regex_in_fac_proc( "CARITï¿½ DI", "CARITÀ DI", pool, true).await?;
+    replace_regex_in_fac_proc( "FRANï¿½OIS", "FRANÇOIS", pool, true).await?;
+    replace_regex_in_fac_proc( "LIï¿½GE", "LIÈGE", pool, true).await?;
+    replace_regex_in_fac_proc( "UNIVERSITï¿½TSMEDIZIN", "UNIVERSITÄTSMEDIZIN", pool, true).await?;
+    replace_regex_in_fac_proc( "UNIVERSITï¿½TSKLINIKUM", "UNIVERSITÄTSKLINIKUM", pool, true).await?;
+    replace_regex_in_fac_proc( "Hï¿½PITAL", "HÔPITAL", pool, true).await?;
+    replace_regex_in_fac_proc( "UNIVERSITï¿½", "UNIVERSITÀ", pool, true).await?;
+    replace_regex_in_fac_proc( "ST. MARYï¿½S HOSPITAL", "ST. MARY’S HOSPITAL", pool, true).await?;
+    replace_regex_in_fac_proc( " ï¿½ ", " - ", pool, true).await?;
 
-    */
-        
+    replace_regex_in_fac_proc( "SZPITALE WOJEWï¿½DZKIE W GDYNI SPï¿½LKA Z OGRANICZONA ODPOWIEDZIALNOSCIA", "Szpitale Wojewódzkie w Gdyni Sp. z o.o.", pool, true).await?;
+
+
+    replace_regex_in_fac_proc("Children¿s", "Children’s", pool, true).await?;
+    replace_regex_in_fac_proc("D¿Hebron", "D’Hebron", pool, true).await?;
+    replace_regex_in_fac_proc("Quinta D¿Or", "Quinta D’Or", pool, true).await?;
+    replace_regex_in_fac_proc("Hospital ¿1", "Hospital No.1", pool, true).await?;
+    replace_regex_in_fac_proc("6¿ City", "No.6 City", pool, true).await?;
+    replace_regex_in_fac_proc("Hospital ¿ 442", "Hospital No.442", pool, true).await?;
+    replace_regex_in_fac_proc("Institute¿Downriver", "Institute - Downriver", pool, true).await?; 
+    replace_regex_in_fac_proc("Rafa¿", "Rafał", pool, true).await?;
+    replace_regex_in_fac_proc(" ¿National Medical Research Oncology Centre named after N.N.", ", National Medical Research Center of Oncology named after N.N. Petrov", pool, true).await?;
+    replace_regex_in_fac_proc("ZespAA GruAicy i ChorAb PA¿uc", "Zespół Gruźlicy i Chorób Płuc", pool, true).await?;
+    replace_regex_in_fac_proc("¿KardioDent¿", "KardioDent", pool, true).await?;
+    replace_regex_in_fac_proc("¿Sveti Naum¿", "Sveti Naum", pool, true).await?;
+    replace_regex_in_fac_proc("¿Promedicus¿", "Promedicus", pool, true).await?;
+    replace_regex_in_fac_proc("¿Attikon¿", "Attikon", pool, true).await?;
+    replace_regex_in_fac_proc("¿Sf. Apostol Andrei¿", "Sf. Apostol Andrei", pool, true).await?;
+    replace_regex_in_fac_proc("Charleroi ¿ Site Imtr", "Charleroi - Site IMTR", pool, true).await?;
+    replace_regex_in_fac_proc("Sk¿odowskiej-Curie", "Skłodowska-Curie", pool, true).await?;
+    replace_regex_in_fac_proc("Zak¿ad", "Zakład", pool, true).await?;
+    replace_regex_in_fac_proc("Vitamed -Ga¿aj I", "Vitamed Gałaj i", pool, true).await?;
+    replace_regex_in_fac_proc("Region Â¿Sverdlovsk", "Region, Sverdlovsk", pool, true).await?;
+    replace_regex_in_fac_proc("Oddzia¿", "Oddział", pool, true).await?; 
+    replace_regex_in_fac_proc(" ¿Region Clinical Hospital #3¿", ", Region Clinical Hospital #3", pool, true).await?;
+    replace_regex_in_fac_proc(" ¿ ",  " - ", pool, true).await?; 
+
+    info!("");
     Ok(())
 }
 
-
-pub async fn remove_double_commas(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
+pub async fn  remove_double_quotes(pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
-    /*
-    update ad.locs
-	set fac_proc = replace(fac_proc, ' ,,', ' ') where fac_proc like '% ,,%'; 
-	update ad.locs
-	set fac_proc = replace(fac_proc, ',, ', ', ') where fac_proc like '%,, %'; 
-	update ad.locs
-	set fac_proc = replace(fac_proc, ',,', '') where fac_proc like '%,,' or fac_proc like ',,%';
-	update ad.locs
-	set fac_proc = replace(fac_proc, ',,', ', ') where fac_proc ~ '[A-za-z]+,,[A-za-z]+'; 
-
-    */
-        
+    replace_like_in_fac_proc( "\"", "", pool, true).await?;
+    replace_like_in_fac_proc( "&#34;", "", pool, true).await?;
+    replace_like_in_fac_proc( "''''", "", pool, true).await?;
+    
+    info!("");
     Ok(())
 }
 
-
-pub async fn process_apostrophes(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
+pub async fn remove_single_quotes(pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
-    /* single apostrophe processing notmally converts to a single right quote...
-	-- unless at the start of a line or after a space
+    replace_like_in_fac_proc( "&amp;", "&", pool, true).await?;
+    replace_like_in_fac_proc( "&quot;", "", pool, true).await?;
+    replace_like_in_fac_proc( "&#39;", "’", pool, true).await?;
+    // The &amp; update has to be done twice
+    replace_like_in_fac_proc( "&amp;", "&", pool, true).await?;
+   
+    info!("");
+    Ok(())
+}
 
-	-- the first group are a small cluster of Dutch names starting with 't or 's 
-	-- (single letter contractions of words for 'the' and 'of the'). They are replaced 
-	-- by a right single quote
+pub async fn remove_double_commas(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    replace_like_in_fac_proc( " ,,", " ", pool, true).await?;
+    replace_like_in_fac_proc( ",, ", ", ", pool, true).await?;
 
-	update ad.locs 
-	set fac_proc = replace(fac_proc, '''', '’') where fac_proc ~ '^''[a-zA-Z] '; 
-	update ad.locs
+    let sql = r#"update ad.locs
+	set fac_proc = replace(fac_proc, ',,', '') where fac_proc like '%,,' or fac_proc like ',,%';"#;
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had ',,' removed from beginning or end of name", res); 
+
+    let sql = r#"update ad.locs
+	set fac_proc = replace(fac_proc, ',,', ', ') where fac_proc ~ '[A-za-z]+,,[A-za-z]+';"#;
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had ',,' replaced by ', ' when directly between text", res);
+    
+    info!("");        
+    Ok(())
+}
+
+pub async fn process_apostrophes(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    // Single apostrophe processing notmally converts to a right single quote (RSQ)
+	// unless at the start of a line or after a space
+
+	// The first group are a small cluster of Dutch names starting with 't or 's 
+	// (single letter contractions of words for 'the' and 'of the'). 
+    // The apostrophes are replaced by a right single quote.
+
+    let sql = r#"update ad.locs 
 	set fac_proc = replace(fac_proc, '''', '’') 
-	where fac_proc ~ 's-Hertogenbosch' or fac_proc ~ 'Arnhem ''S Radiotherapeutisc';
+    where fac_proc ~ '^''[a-zA-Z] '; "#;
+    let res1 = execute_sql(sql, pool).await?.rows_affected();
+    
+    let sql = r#"update ad.locs
+	set fac_proc = replace(fac_proc, '''', '’') 
+	where fac_proc ~ 's-Hertogenbosch' or fac_proc ~ 'Arnhem ''S Radiotherapeutisc';"#;
+    let res2 = execute_sql(sql, pool).await?.rows_affected();
+
+    info!("{} records had apostrophes before single letters replaced by RSQ", res1 + res2); 
+    
+    // a second group deals with a typo (especially common with some Chinese hospitals)
+
+    let sql = r#"update ad.locs 
+    set fac_proc = replace(fac_proc, ' ''s ', '’s ') 
+	where fac_proc ~ ' ''s Hospit' or fac_proc ~ ' ''s Liberat'
+	or fac_proc ~ ' ''s Research'; "#;
+    let res1 = execute_sql(sql, pool).await?.rows_affected();
+    
+    // In the case below the 's seems to be an unnecessary addition, so it can be removed
+
+    let sql = r#"update ad.locs 
+    set fac_proc = replace(fac_proc, ' ''s ', ' ') 
+	where fac_proc ~ 'Einstein ''s (IIEP)$'; "#;
+    let res2 = execute_sql(sql, pool).await?.rows_affected();
+
+    info!("{} records had apostrophes replaced / removed in typos", res1 + res2); 
+
+    // in almost all other cases the presence of '% ''%' indicates
+	// a pair of quotes around a name. They can both be removed.
+
+    let sql = r#"update ad.locs 
+    set fac_proc = replace(fac_proc, '''', '') 
+	where fac_proc ~ ' '''; "#;
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had apostrophes removed when found after a space", res); 
+
+	// The remaining apostrophes are therefore single
+	// right quotes acting as possessives or a contraction / ellision
+
+    let sql = r#"update ad.locs 
+    set fac_proc = replace(fac_proc, '''', '’') 
+	where fac_proc ~ ''''; "#;
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had apostrophes replaced by right single quotes", res); 
 	
-	-- a second group deals with a typo (especially common with some Chinese hospitals)
-	
-	update ad.locs set fac_proc = replace(fac_proc, ' ''s ', '’s ') 
-	where fac_proc ilike '% ''s Hospit%' or fac_proc ilike '% ''s Liberat%'
-	or fac_proc ilike '% ''s Research%';
-	
-	-- in the case below the 's seems to be an unnecessary addition, so it can be removed
-	
-	update ad.locs set fac_proc = replace(fac_proc, ' ''s ', ' ') 
-	where fac_proc ilike '%Einstein ''s (IIEP)'; 
-	
-	-- in almost all other cases the presence of '% ''%' indicates
-	-- a pair of quotes around a name. They can both be removed.
-	
-	update ad.locs set fac_proc = replace(fac_proc, '''', '') 
-	where fac_proc like '% ''%';  
-	
-	-- The remaining apostrophes are therefore single
-	-- right quotes acting as possessives or a contraction / ellision
-	
-	update ad.locs set fac_proc = replace(fac_proc, '''', '’') 
-	where fac_proc like '%''%'; 
-*/
+    info!("");
+    Ok(())
+}
+
+pub async fn process_upper_ticks(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    // The character is U+00b4. Seems to be used as an apostrophe in some 
+    // settings (esp. Spanish records), and can be processed in a similar way
+
+    // this odd one needs to be done first
+
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, 'd ´Hebron', 'd’Hebron')  where fac_proc ~ 'd ´Hebron'; "#;
+    execute_sql(sql, pool).await?.rows_affected();
+
+    // U+00b4 at the start of a line or after a space - indicates all can be removed from the line.
+
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '´', '')  where fac_proc ~ '^´'; "#;
+    let res1 = execute_sql(sql, pool).await?.rows_affected();
+
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '´', '')  where fac_proc ~ ' ´';  "#;
+    let res2 = execute_sql(sql, pool).await?.rows_affected();
+
+    info!("{} records had '´' removed when found at beginning or after a space", res1 + res2); 
+
+    // then the remainder - straightforward replacement (apart from one odd one that needs a )
+ 
+    replace_regex_in_fac_proc( "´", "’", pool, true).await?;
+    info!("");
+    Ok(())
+}
+
+pub async fn remove_leading_trailing_odd_chars(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    remove_leading_char_in_fac_proc("-", pool, true).await?;
+    remove_leading_char_in_fac_proc(".", pool, true).await?;
+    remove_leading_char_in_fac_proc(",", pool, true).await?;
+    remove_leading_char_in_fac_proc(":", pool, true).await?;
+    remove_leading_char_in_fac_proc(";", pool, true).await?;
+    remove_leading_char_in_fac_proc("&", pool, true).await?;
+    remove_leading_char_in_fac_proc("•", pool, true).await?;
+    remove_leading_char_in_fac_proc("_", pool, true).await?;
+
+    remove_trailing_char_in_fac_proc("-", pool, true).await?;
+    remove_trailing_char_in_fac_proc(".", pool, true).await?;
+    remove_trailing_char_in_fac_proc(",", pool, true).await?;
+    remove_trailing_char_in_fac_proc(":", pool, true).await?;
+    remove_trailing_char_in_fac_proc(";", pool, true).await?;
+    remove_trailing_char_in_fac_proc("&", pool, true).await?;
+    remove_trailing_char_in_fac_proc("’", pool, true).await?;
+    
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '!', '1') where fac_proc ~ '^!'; "#;
+    execute_sql(sql, pool).await?.rows_affected();
+
+    let sql = r#"update ad.locs set fac_proc = trim(fac_proc) where fac_proc ~ '^ ' or fac_proc ~ ' $';  "#;
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records with spaces at beginning or end trimmed", res); 
+
+    info!("");
+    Ok(())
+
+}
+
+pub async fn remove_underscores(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    // Need to do these particular situations first
+
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '_', '') where fac_proc ~ '[A-Za-z0-9#-]_ '; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had underscores removed when directly following text and before a space", res); 
+
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '_', '') where fac_proc ~ ' _[A-Za-z0-9#-]'; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had underscores removed when directly preceding text after a space", res); 
+
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '_', ' ') where fac_proc ~ '[A-Za-z0-9#-]_[A-Za-z0-9#-]'; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had underscores replaced by spaces when directly between text", res); 
+
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '_', '') where fac_proc ~ '_$'; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had underscores removed when at the end of the name", res); 
+
+    // Strightforward replacements
+
+	replace_regex_in_fac_proc(" _ ", " ", pool, true).await?; 
+	replace_regex_in_fac_proc("._", ". ", pool, true).await?; 
+	replace_regex_in_fac_proc("__", " ", pool, true).await?; 
+
+    // Remainder 
+
+	replace_regex_in_fac_proc("_", " ", pool, true).await?;  
+
+    info!("");    
+    Ok(())
+}
+
+pub async fn improve_comma_spacing(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+    // First deal with these few specific anomalies.
+
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ',.', ',') 
+	where fac_proc like '%Policlinico A,. Gemelli%' or fac_proc like '%Genetics Unit,. Royal Manchester%'; "#; 
+    execute_sql(sql, pool).await?.rows_affected();
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ',.', '.,') where fac_proc like '%Co Ltd,. Haneda%' "#; 
+	execute_sql(sql, pool).await?.rows_affected();
+
+	// Then do the general insertion of a space after a comma next to text.
+	    
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ',', ', ') 
+    where fac_proc ~ ',[A-Za-z0-9\(\)#]'; "#;  
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had spaces inserted after commas which were directly before text", res); 
+  	
+    // The process above adds many spurious spaces, along with existing anomalies of the kinds below
+
+    replace_regex_in_fac_proc(",  ", ", ", pool, true).await?; 
+	replace_regex_in_fac_proc(" , ", ", ", pool, true).await?; 
+    
+    info!("");  
+    Ok(())
+}
+
+pub async fn improve_bracket_spacing(pool: &Pool<Postgres>) -> Result<(), AppError> {  
         
+    // Right bracket
+
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ')', ') ') 
+	where fac_proc ~ '\)[A-Za-z0-9#-]'; "#;
+    let res = execute_sql(sql, pool).await?.rows_affected();   
+	info!("{} records had spaces inserted after right bracket directly before text", res); 
+
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ')  ', ') ') 
+	where fac_proc ~ '\)  '; "#;  
+    let res = execute_sql(sql, pool).await?.rows_affected();
+	info!("{} records had ')  ' replaced by ') '", res); 
+	
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ' ) ', ') ') 
+	where fac_proc ~ ' \) '; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();
+	info!("{} records had ' ) ' replaced by ') '", res); 
+	
+    // Left bracket
+
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '(', ' (') 
+	where fac_proc ~ '[A-Za-z0-9#.\)-]\(' and fac_proc !~ '\([a-z]\)'; "#;   
+    let res = execute_sql(sql, pool).await?.rows_affected();
+	info!("{} records had spaces inserted before left bracket directly after text", res); 
+
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, '  (', ' (') 
+	where fac_proc ~ '  \('; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();  
+    info!("{} records had '  (' replaced by ' ('", res); 
+	
+	let sql = r#"update ad.locs set fac_proc = replace(fac_proc, ' ( ', ' (') 
+	where fac_proc ~ ' \( '; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();  
+	info!("{} records had ' ( ' replaced by ' ('", res); 
+	
+    info!("");
+    Ok(())
+}
+
+pub async fn remove_initial_numbering(pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    
+   // remove_regexp_from_fac_proc(r"trim(replace(fac_proc, substring (fac_proc from '^[0-9]{1,2}\. '), ''))", r"'^[0-9]{1,2}\. '", "initial numbering removed", pool).await?;
+   // remove_regexp_from_fac_proc(r"trim(replace(fac_proc, substring (fac_proc from '^[a-e]{1}\. '), ''))", r"'^[a-e]{1}\. '", "initial lettering removed", pool).await?;
+
+    let sql = r#"update ad.locs c
+	set fac_proc = trim(replace(fac_proc, substring (fac_proc from '^[0-9]{1,2}\. '), ''))
+	where fac_proc ~ '^[0-9]{1,2}\. '; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();  
+	info!("{} records had initial numbering removed", res); 
+
+    let sql = r#"update ad.locs c
+	set fac_proc = trim(replace(fac_proc, substring (fac_proc from '^[a-e]{1}\. '), ''))
+    select * from ad.locs
+    where fac_proc ~ '^[a-e]{1}\. '; "#; 
+    let res = execute_sql(sql, pool).await?.rows_affected();  
+	info!("{} records had initial lettering removed", res); 
+
+    info!("");    
     Ok(())
 }
 
 
-pub async fn process_upper_ticks(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-      
-    /* update ad.locs set fac_proc = replace(fac_proc, '´', '')  where fac_proc ~ '^´';  
-	update ad.locs set fac_proc = replace(fac_proc, 'd ´Hebron', 'd’Hebron')  where fac_proc ~ 'd ´Hebron';  
-	update ad.locs set fac_proc = replace(fac_proc, '´', '')  where fac_proc ~ ' ´'; 
-
-	-- then the remainder - straightforward replacement
-    update ad.locs set fac_proc = replace(fac_proc, '´', '’')  where fac_proc ~ '´'; 
-     */
-      
-    Ok(())
-}
+pub async fn regularise_word_site(pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
-
-pub async fn remove_leading_trailing_odd_chars(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
+    // A few initial tidyings
     
+    replace_in_fac_proc("Ssite", "Site", "r", true, "", pool).await?; 
+    replace_in_fac_proc("site!", "Site", "r", true, "", pool).await?; 
+
+    replace_in_fac_proc("SIte", "Site", r"fac_proc ~ ' SIte' or fac_proc ~ '^SIte' or fac_proc ~ '\(SIte'",  true, "", pool).await?; 
+	
+    replace_in_fac_proc("sites ", "Sites " , "fac_proc ~ '^sites '", true, "at the beginning of the name", pool).await?;  
+    replace_in_fac_proc(" sites", " Sites", "fac_proc ~ ' sites$'",  true, "at the end of the name", pool).await?; 
+
+    // Make number + s/Sites more consistent
+	
+    replace_in_fac_proc("sites", " Sites", "fac_proc ~ '[0-9]+sites'", true, "when immediately following a number", pool).await?;
+    replace_in_fac_proc("Sites", " Sites", "fac_proc ~ '[0-9]+Sites'", true, "when immediately following a number", pool).await?;
+    replace_in_fac_proc(" sites", " Sites", "fac_proc ~ '[0-9]+ sites'", true, "when following a number and a space", pool).await?;
+
+    // Make SITE and SITES more consistent
+
+    replace_in_fac_proc("ONCOSITE", "Oncosite", "r", true, "", pool).await?; 
+    replace_in_fac_proc("INSITE", "Insite", "r", true, "", pool).await?; 
+
+    replace_in_fac_proc(" SITES", " Sites", "fac_proc like '% SITES%'", true, "when at the end of the name", pool).await?;
+    replace_in_fac_proc(" SITE", " Site", r#"fac_proc like '%SITE%' 
+	and fac_proc not like '%VERSITE%' and fac_proc not like '%SITEM%'"#, true, "(with some exceptions)", pool).await?;
+    
+    // Make beginning and ending 'site' more consistent
+
+    replace_in_fac_proc("site ", "Site ", "b", true, "at the beginning of the name", pool).await?; 
+    replace_in_fac_proc(" site", " Site", "e", true, "at the end of the name", pool).await?; 
+
+    replace_in_fac_proc("(site", "(Site", r"fac_proc ~ '\(site'", true, "when immediately preceded by '('", pool).await?; 
+    replace_in_fac_proc(" site ", " Site ", "fac_proc ~ ' site [0-9]+$'", true, "when followed by a space and a number", pool).await?; 
+
+    //Turn almost all remaining 'site' into 'Site' (exclude the 'further info' records)
+    
+    replace_in_fac_proc("-site", "- Site", "fac_proc ~ ' -site'", true, "", pool).await?; 
+    replace_in_fac_proc("site-", "Site -", "fac_proc ~ ' site-'", true, "", pool).await?; 
+
+    replace_in_fac_proc("site# ", "Site #", "fac_proc ~ 'site# [0-9]+'", true, "when followed directly by a number", pool).await?; 
+    replace_in_fac_proc("site#", "Site #", "fac_proc ~ 'site#[0-9]+'", true, "when followed directly by a number", pool).await?; 
+
+    replace_in_fac_proc(" site", " Site ", "fac_proc ~ ' site[0-9]+'", true, "when followed directly by a number", pool).await?; 
+    replace_in_fac_proc(" site", " Site", r"fac_proc ~ ' site\)'", true, "when directly precedinmg ')'", pool).await?; 
+ 
+    replace_in_fac_proc(" site,", " Site,", "r", true, "", pool).await?; 
+    replace_in_fac_proc(" site:", " Site:", "r", true, "", pool).await?; 
+    replace_in_fac_proc(" site;", " Site;", "r", true, "", pool).await?; 
+        
+    replace_in_fac_proc("-site", " - Site", r#"fac_proc ~ '-site'
+	and fac_proc !~ 'multi-site' and fac_proc !~ 'on-site' and fac_proc !~ 'tri-site'"#, true, "(excluding genuinely hyphenated words)", pool).await?; 
+    replace_in_fac_proc(" site ", " Site ", r#"fac_proc ~ ' site '
+	and fac_proc !~ '^For ' and fac_proc !~ '^Contact '"#, true, "(excluding genuinely hyphenated words)", pool).await?; 
+
+    // Try and regularise Site plus hashes and numbers
+    
+    replace_in_fac_proc("Site#", "Site #", "fac_proc ~ 'Site#[0-9]+'", true, "when directly followed by a number", pool).await?; 
+    replace_in_fac_proc("Site# ", "Site #", "fac_proc ~ 'Site# [0-9]+'", true, "when followed by a spae and a number", pool).await?; 
+    replace_in_fac_proc("Site # ", "Site #", "fac_proc ~ 'Site # [0-9]+'", true, "when directly followed by a number", pool).await?; 
+
+    info!("");    
+
     /*
-    update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^-';  
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^\.'; 
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^,';  
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^:';  
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^;';  
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^&';  
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^•';  
-	update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^_' ; 
-	
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ '-$';  
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ '\.$'; 
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ ',$';  
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ ':$';  
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ ';$';  
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ '&$';  
-	update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ '’$';  
-	update ad.locs set fac_proc = replace(fac_proc, '!', '1') where fac_proc ~ '^!';  
-	
-	update ad.locs set fac_proc = trim(fac_proc) where fac_proc ~ '^ ' or fac_proc ~ ' $'; 
- */
-
-        
-    Ok(())
-}
-
-
-pub async fn remove_underscores(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
-    /* update ad.locs set fac_proc = replace(fac_proc, '_', '') where fac_proc ~ '[A-Za-z0-9#-]_ ';  
-	update ad.locs set fac_proc = replace(fac_proc, '_', '') where fac_proc ~ ' _[A-Za-z0-9#-]';  
-	update ad.locs set fac_proc = replace(fac_proc, '_', ' ') where fac_proc ~ '[A-Za-z0-9#-]_[A-Za-z0-9#-]'; 
-	update ad.locs set fac_proc = replace(fac_proc, '_', '') where fac_proc ~ '_$'; 
-	update ad.locs set fac_proc = replace(fac_proc, ' _ ', ' ') where fac_proc ~ ' _ ';  
-	update ad.locs set fac_proc = replace(fac_proc, '._', '. ') where fac_proc ~ '._'; 
-	update ad.locs set fac_proc = replace(fac_proc, '__', ' ') where fac_proc ~ '__' ;  
-	update ad.locs set fac_proc = replace(fac_proc, '_', ' ') where fac_proc ~ '_';  -- remainder
-*/
-        
-    Ok(())
-}
-
-
-pub async fn improve_comma_spacing(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    /* 
-    -- first deal with these few specific anomalies
-	update ad.locs set fac_proc = replace(fac_proc, ',.', ',') 
-	where fac_proc like '%Policlinico A,. Gemelli%' or fac_proc like '%Genetics Unit,. Royal Manchester%'; 
-	update ad.locs set fac_proc = replace(fac_proc, ',.', '.,') where fac_proc like '%Co Ltd,. Haneda%' 
-	
-	-- then do the remainder
-	
-	update ad.locs set fac_proc = replace(fac_proc, ',', ', ') 
-	where fac_proc ~ ',' and fac_proc !~ ', ' */
-        
-    Ok(())
-}
-
-
-pub async fn improve_bracket_spacing(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    /*update ad.locs set fac_proc = replace(fac_proc, ')', ') ') where fac_proc ~ '\)[A-Za-z0-9#-]';  
-	update ad.locs set fac_proc = replace(fac_proc, '(', ' (') 
-	where fac_proc ~ '[A-Za-z0-9#-]\(' and fac_proc !~ '\([a-z]\)';  
-     */
-        
-    Ok(())
-}
-
-
-pub async fn regularise_word_site(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    /* 
-	update ad.locs set fac_proc = replace(fac_proc, 'Ssite', 'Site') where fac_proc like '%Ssite%'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'site!', 'Site') where fac_proc like '%site!%';  
-	update ad.locs set fac_proc = replace(fac_proc, 'SIte', 'Site') 
-	where fac_proc ~ ' SIte' or fac_proc ~ '^SIte' or fac_proc ~ '\(SIte'; 
-	
-	--make beginning and ending 'sites' consistent
-	update ad.locs set fac_proc = replace(fac_proc, 'sites ', 'Sites ') where fac_proc like 'sites %';   
-	update ad.locs set fac_proc = replace(fac_proc, ' sites', ' Sites') where fac_proc like '% sites'; 
-
-	-- make number + sites more consistent
-	update ad.locs set fac_proc = replace(fac_proc, 'sites', ' Sites') where fac_proc ~ '[0-9]+sites'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Sites', ' Sites') where fac_proc ~ '[0-9]+Sites'; 
-	update ad.locs set fac_proc = replace(fac_proc, ' sites', ' Sites') where fac_proc ~ '[0-9]+ sites'; 
-
-	-- make SITE and SITES more consistent
-	update ad.locs set fac_proc = replace(fac_proc, 'ONCOSITE', 'Oncosite') where fac_proc like '%ONCOSITE%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'INSITE', 'Insite') where fac_proc like '%INSITE%'; 
-	update ad.locs set fac_proc = replace(fac_proc, ' SITES', ' Sites') where fac_proc like '% SITES%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'SITE', 'Site') where fac_proc like '%SITE%' 
-	and fac_proc not like '%VERSITE%' and fac_proc not like '%SITEM%'; 
-
-	--Make the '( Site' and other bracketed text type variations more consistent
-	update ad.locs set fac_proc = replace(fac_proc, '( site', '(Site') where fac_proc ~ '\( site';
-	update ad.locs set fac_proc = replace(fac_proc, '( Site', '(Site') where fac_proc ~ '\( Site';  
-	update ad.locs set fac_proc = replace(fac_proc, '( ', '(') where fac_proc ~ '\( [A-Za-z0-9#-]';  
-	update ad.locs set fac_proc = replace(fac_proc, ' )', ')') where fac_proc ~ '[A-Za-z0-9#-] \)';
-
-	--Make beginning and ending 'site' more consistent
-	update ad.locs set fac_proc = replace(fac_proc, 'site ', 'Site ') where fac_proc ~ '^site';  
-	update ad.locs set fac_proc = replace(fac_proc, ' site', ' Site') where fac_proc ~ ' site$';
-    update ad.locs set fac_proc = replace(fac_proc, ' site ', ' Site ') where fac_proc ~ ' site [0-9]+$';
-
-	--Turn almost all remaining 'site' into 'Site' (exclude the 'further info' records)
-    update ad.locs set fac_proc = replace(fac_proc, 'site', 'Site') where fac_proc ~ '\(site';
-	update ad.locs set fac_proc = replace(fac_proc, '-site', '- Site') where fac_proc ~ ' -site';
-	update ad.locs set fac_proc = replace(fac_proc, 'site-', 'Site -') where fac_proc ~ ' site-';
-	
-	update ad.locs set fac_proc = replace(fac_proc, 'site# ', 'Site #') where fac_proc ~ 'site# [0-9]+'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'site#', 'Site #') where fac_proc ~ 'site#[0-9]+';  
-	update ad.locs set fac_proc = replace(fac_proc, ' site', ' Site') where fac_proc ~ ' site[0-9]+';  
-	update ad.locs set fac_proc = replace(fac_proc, ' site)', ' Site)') where fac_proc ~ ' site\)';  
-	update ad.locs set fac_proc = replace(fac_proc, ' site,', ' Site,') where fac_proc ~ ' site,';  
-	update ad.locs set fac_proc = replace(fac_proc, ' site:', ' Site:') where fac_proc ~ ' site:';  
-	update ad.locs set fac_proc = replace(fac_proc, ' site;', ' Site:') where fac_proc ~ ' site;'; 
-
-	update ad.locs set fac_proc = replace(fac_proc, '-site', ' - Site') where fac_proc ~ '-site'
-	and fac_proc !~ 'multi-site' and fac_proc !~ 'on-site' and fac_proc !~ 'tri-site';
-	
-	update ad.locs set fac_proc = replace(fac_proc, ' site ', ' Site ') where fac_proc ~ ' site '
-	and fac_proc !~ '^For ' and fac_proc !~ '^Contact ';
-
-    -- Try and regularise Site plus hashes and numbers
-    update ad.locs set fac_proc = replace(fac_proc, 'Site#', 'Site #') where fac_proc ~ 'Site#[0-9]+'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Site# ', 'Site #') where fac_proc ~ 'Site# [0-9]+';
-	update ad.locs set fac_proc = replace(fac_proc, 'Site # ', 'Site #') where fac_proc ~ 'Site # [0-9]+';
-
 	--check!
 	select * from ad.locs where fac_proc like '%site%'
 	and fac_proc !~ '[A-Za-zé]site'
@@ -391,17 +595,6 @@ pub async fn correct_place_names(_pool: &Pool<Postgres>) -> Result<(), AppError>
 }
 
 
-pub async fn remove_initial_numbering(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
-    
-    /* update ad.locs c
-	set fac_proc = trim(replace(fac_proc, substring (fac_proc from '^[0-9]{1,2}\. '), ''))
-	where fac_proc ~ '^[0-9]{1,2}\. '
-    */
-        
-    Ok(())
-}
-
-
 pub async fn correct_lower_case_beginnings(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
     /* There are some anomalous lower case beginnings for some facility names
@@ -422,7 +615,7 @@ pub async fn correct_lower_case_beginnings(_pool: &Pool<Postgres>) -> Result<(),
 	
 	update ad.locs set fac_proc = replace(fac_proc, 'faculty of medicine', 'Faculty of Medicine') where fac_proc ~'^faculty of medicine'; 
 	update ad.locs set fac_proc = replace(fac_proc, 'faculty of Medicine', 'Faculty of Medicine') where fac_proc ~'^faculty of Medicine'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'faculty of dentistry', 'Faculty of dentistry') where fac_proc ~'^faculty of dentistry'; 
+	update ad.locs set fac_proc = replace(fac_proc, 'faculty of dentistry', 'Faculty of Dentistry') where fac_proc ~'^faculty of dentistry'; 
 	update ad.locs set fac_proc = replace(fac_proc, 'faculty of Dentistry', 'Faculty of Dentistry') where fac_proc ~'^faculty of Dentistry'; 
 	update ad.locs set fac_proc = replace(fac_proc, 'faculty of ', 'Faculty of ') where fac_proc ~'^faculty of '; 
 	
@@ -784,6 +977,10 @@ pub async fn regularise_word_others(_pool: &Pool<Postgres>) -> Result<(), AppErr
 	update ad.locs set fac_proc = replace(fac_proc, 'medicall', 'medical') where fac_proc ~ 'medicall'; 
 	update ad.locs set fac_proc = replace(fac_proc, 'Medicall', 'Medical') where fac_proc ~ 'Medicall'; 
 	
+    hospita 
+    hospitall
+    hosptal
+
 */
         
     Ok(())

@@ -10,71 +10,129 @@ pub async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResu
 }
 
 
-/*
-pub async fn execute_sql_fb(sql: &str, pool: &Pool<Postgres>, 
-            s1: &str, s2: &str) -> Result<(), AppError> {
+pub async fn replace_in_fac_proc(s1: &str, s2: &str, sql_where: &str, rb: bool, fb: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
     
-    let res = sqlx::raw_sql(&sql).execute(pool)
-        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
+    let sql1 = format!("update ad.locs set fac_proc = replace(fac_proc, '{}', '{}') where ", s1, s2);
+    let sql2 = match sql_where {
+        "r" => format!(" fac_proc ~ '{}'", s1),
+        "k" => format!(" fac_proc like '%{}%'", s1),
+        "b" => format!(" fac_proc ~ '^{}'", s1),
+        "e" => format!(" fac_proc ~ '{}$'", s1),
+        _ => format!("{};", sql_where),
+    };
+    let sql = sql1 + &sql2 + "; ";
 
-    if res.rows_affected() > 1 {
-        info!("{} {} locations {}", res.rows_affected(), s1, s2);
+    let r = sqlx::raw_sql(&sql).execute(pool)
+        .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?.rows_affected();
+    
+    // Feedback line provided (unless rb = false and fb = "")
+
+    let recs = if r==1 {"record"} else {"records"};
+    if rb {
+        if fb != "" {
+            info!("{} {} had '{}' replaced by '{}' {}", r, recs, s1, s2, fb);
+        }
+        else {
+            info!("{} {} had '{}' replaced by '{}'", r, recs, s1, s2);
+        }
     }
     else {
-        info!("{} {} location {}", res.rows_affected(), s1, s2);
+        if fb != "" {
+            info!("{} {} had {}", r, recs, fb);
+        }
     }
-    
+
+        
     Ok(())
 }
-*/
 
 
-pub async fn replace_regex_in_fac_proc(s1: &str, s2: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
+pub async fn replace_regex_in_fac_proc(s1: &str, s2: &str, pool: &Pool<Postgres>, with_fb: bool) -> Result<(), AppError> {
 
     let sql = format!(r#"update ad.locs
 	        set fac_proc = replace(fac_proc, '{}', '{}') where fac_proc ~ '{}' "#, s1, s2, s1); 
 
-    sqlx::raw_sql(&sql).execute(pool)
-           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
+    let r = sqlx::raw_sql(&sql).execute(pool)
+           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?.rows_affected();
+
+    if with_fb {
+        let action_string: String = if s2 == "" {"removed".to_string()} else {format!("replaced by '{}'", s2)};
+        let recs = if r==1 {"record"} else {"records"};
+        info!("{} {} had '{}'s {}", r, recs, s1, action_string);
+    }
 
     Ok({})
 }
 
 
-pub async fn replace_regex_in_fac_proc_fb(s1: &str, s2: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
-
-    let sql = format!(r#"update ad.locs
-	        set fac_proc = replace(fac_proc, '{}', '{}') where fac_proc ~ '{}' "#, s1, s2, s1); 
-
-    let res = sqlx::raw_sql(&sql).execute(pool)
-           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
-
-    if res.rows_affected() > 1 {
-        info!("{} {} replaced by {} in fac_proc", res.rows_affected(), s1, s2);
-    }
-    else {
-        info!("{} {}s replaced by {} in fac_proc", res.rows_affected(), s1, s2);
-    }
-    Ok({})
-}
-
-
-pub async fn replace_like_in_fac_proc_fb(s1: &str, s2: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
+pub async fn replace_like_in_fac_proc(s1: &str, s2: &str, pool: &Pool<Postgres>, with_fb: bool) -> Result<(), AppError> {
 
     let sql = format!(r#"update ad.locs
 	        set fac_proc = replace(fac_proc, '{}', '{}') where fac_proc like '%{}%' "#, s1, s2, s1); 
 
-    let res = sqlx::raw_sql(&sql).execute(pool)
-           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?;
+    let r = sqlx::raw_sql(&sql).execute(pool)
+           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?.rows_affected();
 
-    if res.rows_affected() > 1 {
-        info!("{} {} replaced by {} in fac_proc", res.rows_affected(), s1, s2);
+    if with_fb {
+        let action_string: String = if s2 == "" {"removed".to_string()} else {format!("replaced by '{}'", s2)};
+        let recs = if r==1 {"record"} else {"records"};
+        info!("{} {} had '{}'s {}", r, recs, s1, action_string);
     }
-    else {
-        info!("{} {}s replaced by {} in fac_proc", res.rows_affected(), s1, s2);
-    }
+
     Ok({})
 }
+
+
+pub async fn remove_leading_char_in_fac_proc(s: &str, pool: &Pool<Postgres>, with_fb: bool) -> Result<(), AppError> {
+
+    let mut sql = format!(r#"update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^{}'; "#, s); 
+    
+    if s == "." {
+        sql = format!(r#"update ad.locs set fac_proc = substring(fac_proc, 2) where fac_proc ~ '^\.'; "#); 
+    } 
+
+    let r = sqlx::raw_sql(&sql).execute(pool)
+           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?.rows_affected();
+    
+    if with_fb {
+        if r > 1 {
+            info!("{} records had leading '{}'s removed", r, s);
+        }
+        else {
+            info!("{} record had leading '{}' removed", r, s);
+        }
+    }
+
+    Ok({})
+}
+
+
+pub async fn remove_trailing_char_in_fac_proc(s: &str, pool: &Pool<Postgres>, with_fb: bool) -> Result<(), AppError> {
+
+    let mut sql = format!(r#"update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ '{}$'; "#, s); 
+    
+    if s == "." {
+        sql = format!(r#"update ad.locs set fac_proc = substring(fac_proc, 1, length(fac_proc) - 1) where fac_proc ~ '\.$'; "#); 
+    } 
+
+    let r = sqlx::raw_sql(&sql).execute(pool)
+           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?.rows_affected();
+
+    if with_fb {
+        if r > 1 {
+            info!("{} records had trailing '{}'s removed", r, s);
+        }
+        else {
+            info!("{} record had trailing '{}' removed", r, s);
+        }
+    }
+
+    Ok({})
+}
+
+
+
+
 
 pub async fn execute_temp_phased_transfer(sql: &str, max_id: u64, chunk_size: u64, sql_linker: &str, rec_type: &str, pool: &Pool<Postgres>) -> Result<u64, AppError> {
     

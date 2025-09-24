@@ -116,10 +116,13 @@ pub async fn load_facs_data (processing: &str, max_id: u64, pool: &Pool<Postgres
 
         execute_phased_transfer(sql, max_id, chunk_size, " and ", "nct ids", "ad.locs", pool).await?;
 
+        locs_proc::do_section_header().await?;
         locs_proc::regularise_brackets(pool).await?;
         locs_proc::remove_enclosing_brackets(pool).await?;
-        locs_proc::repair_non_ascii(pool).await?;
-        
+        locs_proc::repair_non_ascii_1(pool).await?;
+        locs_proc::repair_non_ascii_2(pool).await?;
+        locs_proc::repair_non_ascii_3(pool).await?;
+
         locs_proc::remove_double_quotes(pool).await?;
         locs_proc::remove_single_quotes(pool).await?;
         locs_proc::remove_double_commas(pool).await?;
@@ -130,29 +133,29 @@ pub async fn load_facs_data (processing: &str, max_id: u64, pool: &Pool<Postgres
         locs_proc::remove_underscores(pool).await?;
         locs_proc::improve_comma_spacing(pool).await?;
         locs_proc::improve_bracket_spacing(pool).await?;
-
-        locs_proc::regularise_word_site(pool).await?;
-        locs_proc::correct_place_names(pool).await?;
         locs_proc::remove_initial_numbering(pool).await?;
-        locs_proc::correct_lower_case_beginnings(pool).await?;
-        locs_proc::regularise_word_research(pool).await?;
-        locs_proc::regularise_word_investigation(pool).await?;
-        locs_proc::regularise_word_university(pool).await?;
-        locs_proc::regularise_word_others(pool).await?;
-        locs_proc::remove_upper_case_institut(pool).await?;
-       
+
+        vacuum_table("locs", pool).await?;
+
         park_spare_locs_data(max_id, chunk_size, pool).await?;
     }
     else {
         reuse_spare_locs_data(max_id, chunk_size, pool).await?;
+
+        locs_proc::regularise_word_site(pool).await?;
+        locs_proc::regularise_word_research(pool).await?;
+        locs_proc::regularise_word_investigation(pool).await?;
+        locs_proc::regularise_word_university(pool).await?;
+        locs_proc::regularise_word_others(pool).await?;
+
+        locs_proc::correct_place_names(pool).await?;
+        locs_proc::correct_lower_case_beginnings(pool).await?;
+
+        locs_proc::remove_upper_case_institut(pool).await?;
+
+        vacuum_table("locs", pool).await?;
     }
-  
-
-
-
-    vacuum_table("locs", pool).await?;
-
-    
+            
     //let _sql = r#"drop table if exists ad.temp_idents;"#;
     // execute_sql(sql, pool).await?;
 
