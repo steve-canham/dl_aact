@@ -1,6 +1,7 @@
 use super::locs_utils::{replace_in_fac_proc, execute_sql, remove_regexp_from_fac_proc,
                         replace_list_items_with_target, add_zzz_prefix_to_list_items, 
-                        remove_leading_char_in_fac_proc, remove_trailing_char_in_fac_proc};
+                        remove_leading_char_in_fac_proc, remove_trailing_char_in_fac_proc,
+                        replace_list_items_with_capitalised, replace_list_items_with_lower_case};
 
 use sqlx::{Pool, Postgres};
 use crate::AppError;
@@ -741,113 +742,131 @@ pub async fn regularise_word_research(pool: &Pool<Postgres>) -> Result<(), AppEr
 }
 
 
-pub async fn regularise_word_investigation(_pool: &Pool<Postgres>) -> Result<(), AppError> {  
+pub async fn regularise_word_investigation(pool: &Pool<Postgres>) -> Result<(), AppError> {  
     
-    /* // Investigational (Site)
+    // Investigational (Site)
+
 	// Start by ensuring capitalised versions of relevant words (N.B. not the spanish ones).
 	// The 'investigational site' entry type is used by pharma companies, and is therefore essentially English
 	// Also exclude the long 'For further informatrion' entries
 	
-	update ad.locs set fac_proc = replace(fac_proc, 'inv', 'Inv') 
+    let sql = r#"update ad.locs set fac_proc = replace(fac_proc, 'inv', 'Inv') 
 	where (fac_proc like '% inves%' or fac_proc like 'inves%'
 	or fac_proc like '%invers%' or fac_proc like '%inveti%' 
 	or fac_proc like '%invsti%')
 	and fac_proc ~* 'Site'
 	and fac_proc !~ 'For '
 	and fac_proc !~ 'investigac' and fac_proc !~ 'investigaç'
-	and fac_proc !~ 'inform'; 
-	
-	update ad.locs set fac_proc = replace(fac_proc, 'ines', 'Ines') 
-	where (fac_proc like '% inesti%' or fac_proc like 'inesti%')
-	and fac_proc ~* 'Site'
-	and fac_proc !~ '^For '
-	and fac_proc !~ 'investigac' and fac_proc !~ 'investigaç'
-	and fac_proc !~ 'inform';  
+	and fac_proc !~ 'inform';"#;
+    let res = execute_sql(sql, pool).await?.rows_affected();
+    info!("{} records had investig- related words capitalised", res); 
 
-	--This small group needs to be added to the list additionally ('Site' missing in original)
+	// This small group needs to be added to the list additionally ('Site' missing in original)
+    
+    replace_in_fac_proc("Trius investigator", "Trius Investigator Site", "fac_proc ~ 'Trius investigator'", true, "", pool).await?; 
+
+    /* 
+    // Check here that all singular 'site' are 'Site' - appears to be the case
 	
-	update ad.locs set fac_proc = replace(fac_proc, 'Trius investigator', 'Trius Investigator Site') 
-	where fac_proc like '%Trius investigator%';
-	
-	--ensure all 'Site' rather than 'site' (still 25 appearing?) - may be sprious
-	
-	update ad.locs set fac_proc = replace(fac_proc, 'site', 'Site') 
-	where (fac_proc like '% Inves%' or fac_proc like 'Inves%' 
+    select * from ad.locs
+    where (fac_proc like '% Inves%' or fac_proc like 'Inves%' 
 	or fac_proc like '%Invers%' or fac_proc like '%Inveti%' 
 	or fac_proc like '%Invsti%' or fac_proc like '%Inesti%')
 	and fac_proc !~ 'Investigac' and fac_proc !~ 'Investigaç'
 	and fac_proc ~ 'site'
+	and fac_proc !~ 'sites'
 	and fac_proc !~ '^For '
-	and fac_proc !~ 'inform'; 
-     let ws = vec!["", "", "*", "", "", "", "", "", "", "", "", ""];
-
-      let ws = vec!["", "", "*", "", "", "", "", "", "", "", "", ""];
-
-
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigation Site', 'Investigational Site') where fac_proc like '%Investigation Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigator Site', 'Investigational Site') where fac_proc like '%Investigator Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigative Site', 'Investigational Site') where fac_proc like '%Investigative Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigate Site', 'Investigational Site') where fac_proc like '%Investigate Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investiational Site', 'Investigational Site') where fac_proc like '%Investiational Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigtional Site', 'Investigational Site') where fac_proc like '%Investigtional Site%'; 
-	
-	update ad.locs set fac_proc = replace(fac_proc, 'Inverstigational Site', 'Investigational Site') where fac_proc like '%Inverstigational Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Invetigational Site', 'Investigational Site') where fac_proc like '%Invetigational Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Invesitgational Site', 'Investigational Site') where fac_proc like '%Invesitgational Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Invstigative Site', 'Investigational Site') where fac_proc like '%Invstigative Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investivative Site', 'Investigational Site') where fac_proc like '%Investivative Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigatice Site', 'Investigational Site') where fac_proc like '%Investigatice Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigating Site', 'Investigational Site') where fac_proc like '%Investigating Site%'; 
-	
-	update ad.locs set fac_proc = replace(fac_proc, 'Investgative Site', 'Investigational Site') where fac_proc like '%Investgative Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigationel Site', 'Investigational Site') where fac_proc like '%Investigationel Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Investigtive Site', 'Investigational Site') where fac_proc like '%Investigtive Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Invesgational Site', 'Investigational Site') where fac_proc like '%Invesgational Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Invesigative', 'Investigational Site') where fac_proc like '%Invesigative Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Inestigational', 'Investigational Site') where fac_proc like '%Inestigational Site%'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Invesigational', 'Investigational Site') where fac_proc like '%Invesigational Site%'; 
-*/
+	and fac_proc !~ 'inform';
     
-    Ok(())
-}
+    */
 
-pub async fn regularise_word_university(_pool: &Pool<Postgres>) -> Result<(), AppError> { 
-/*
+    let ws = vec!["Investigation Site", "Investigator Site", "Investigative Site", "Investigate Site", 
+    "Investiational Site", "Investigtional Site", "Inverstigational Site", "Invetigational Site", 
+    "Invesitgational Site", "Invstigative Site", "Investivative Site", "Investigatice Site"];
+    replace_list_items_with_target("Investigational Site", &ws, pool).await?;
 
- let ws = vec!["", "", "*", "", "", "", "", "", "", "", "", ""];
+    let ws = vec!["Investigating Site", "Investgative Site", "Investigationel Site", 
+    "Investigtive Site", "Invesgational Site", "Invesigative Site", "Inestigational Site", "Invesigational Site"];
+    replace_list_items_with_target("Investigational Site", &ws, pool).await?;
 
-  let ws = vec!["", "", "*", "", "", "", "", "", "", "", "", ""];
-
-update ad.locs set fac_proc = replace(fac_proc, 'univerity', 'University') where fac_proc ~ 'univerity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Univerity', 'University') where fac_proc ~ 'Univerity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'unversity', 'University') where fac_proc ~ 'unversity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Unversity', 'University') where fac_proc ~ 'Unversity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'univrsity', 'University') where fac_proc ~ 'univrsity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Univrsity', 'University') where fac_proc ~ 'Univrsity'; 
-
-    update ad.locs set fac_proc = replace(fac_proc, 'univeersity', 'University') where fac_proc ~ 'univeersity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Univeersity', 'University') where fac_proc ~ 'Univeersity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'univerrsity', 'University') where fac_proc ~ 'univerrsity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Univerrsity', 'University') where fac_proc ~ 'Univerrsity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'universsity', 'University') where fac_proc ~ 'universsity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Universsity', 'University') where fac_proc ~ 'universsity'; 
-
-    update ad.locs set fac_proc = replace(fac_proc, 'univresity', 'University') where fac_proc ~ 'univresity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Univresity', 'University') where fac_proc ~ 'Univresity'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'univeristy', 'University') where fac_proc ~ 'univeristy'; 
-    update ad.locs set fac_proc = replace(fac_proc, 'Univeristy', 'University') where fac_proc ~ 'Univeristy'; 
-
-    update ad.locs set fac_proc = replace(fac_proc, 'Duke Univ. Med. Ctr.', 'Duke University Medical Center') where fac_proc ~ 'Duke Univ. Med. Ctr.'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'univ. of', 'University of') where fac_proc ~ 'univ. of'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Univ. of', 'University of') where fac_proc ~ 'Univ. of'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Univ.', 'University') where fac_proc ~ 'Univ\.' and country ~ 'United States' ; 
-*/
-        
+    info!(""); 
     Ok(())
 }
 
 
-pub async fn regularise_word_others(_pool: &Pool<Postgres>) -> Result<(), AppError> { 
+pub async fn regularise_word_university(pool: &Pool<Postgres>) -> Result<(), AppError> { 
+
+    let ws = vec!["univerity", "Univerity", "unversity", "Unversity", "univrsity", "Univrsity", "univeersity", "Univeersity"];
+    replace_list_items_with_target("University", &ws, pool).await?;
+
+    let ws = vec!["univerrsity", "Univerrsity", "universsity", "Universsity", "univresity", "Univresity", "univeristy", "Univeristy"];
+    replace_list_items_with_target("University", &ws, pool).await?;
+
+    replace_in_fac_proc("university", "University", "r", true, "", pool).await?; 
+    replace_in_fac_proc("UNIVERSITY", "University", "r", true, "", pool).await?; 
+    replace_in_fac_proc("univ. of", "University of", "r", true, "", pool).await?; 
+    replace_in_fac_proc("Univ. of", "University of", "r", true, "", pool).await?; 
+    replace_in_fac_proc("Univ.", "University", r"fac_proc ~ 'Univ\.' and country ~ 'United States'", true, "", pool).await?; 
+  
+
+    // update ad.locs set fac_proc = replace(fac_proc, 'Duke Univ. Med. Ctr.', 'Duke University Medical Center') where fac_proc ~ 'Duke Univ. Med. Ctr.'; 
+
+    info!("");
+    Ok(())
+}
+
+
+pub async fn regularise_word_others(pool: &Pool<Postgres>) -> Result<(), AppError> { 
+
+
+let ws = vec![" THE ", " AND ", " Y ", " OF ", " DE ", " DU ", " DEL ", " DELLA ",
+ " E ", " SOBRE ", " D’", " FOR "];
+replace_list_items_with_lower_case(&ws, pool).await?;
+
+let ws = vec!["CENTRE", "CENTRO", "INSTITUTO", "INSTITUTE", "ISTITUTO", "INSTITUT",
+   "FOUNDATION", "FUNDACION", "TRATAMIENTO", "TREATMENT", "GENERAL", "NATIONAL", "REGIONAL", "FACULTY",
+   "MEDICINE", "DENTISTRY", "CLINICAL", "TRIALS", "CLÍNICA", "CLINIC", "CARDIOLOGY", "INVESTIGACIONES", 
+   "INVESTIGACION", "INVESTIGATION", "HEMATOLOGIE", "THORACIC"];
+replace_list_items_with_capitalised(&ws, pool).await?;
+
+let ws = vec!["CANCEROLOGIE", "BIOCANCER", "UNICANCER", "CANCERCARE", "CANCER", 
+   "CURIE", "ONCOLOGY", "ONCOLOGÍA", "ONCOLOGIA", "ALLIANCE", "CARE", "CHILDREN’S"];
+replace_list_items_with_capitalised(&ws, pool).await?;
+
+let ws = vec!["SEATTLE", "MONTPELLIER", "AURELLE", " VAL ", "ONTARIO", 
+"JIAMUSI", "STRASBOURG", "EUROPE", "UKRAINE", "LISBOA", "URAL", "CATALAN", "CATALA",
+"BASSE", "NORMANDIE", "GUSTAVE", "ROUSSY", "PARIS", " NEW ", "ENGLAND", "YORK", "DELHI",
+"CALIFORNIA", "WISCONSIN", "PENNSYLVANIA", "TEXAS", "CHINESE", "CHINA", "ATHENS", "MASSACHUESETTS",
+"WASHINGTON", "BIRMINGHAM", "ALABAMA", "DUKE"];
+replace_list_items_with_capitalised(&ws, pool).await?;
+
+let ws = vec!["FORSCHUNGSINSTITUT", "FORSCHUNG", "TRANSLATIONAL", "METABOLISM", "DIABETES",
+"SCIENCES", "DENTAL", "GROUPE", "GROUP", "HOSPITALIER", "MUTUALISTE", "COLLEGE", "SCHOOLS", "SCHOOL"];
+replace_list_items_with_capitalised(&ws, pool).await?;
+
+
+let ws = vec!["recruting", "recuiting"];
+replace_list_items_with_target("recruiting", &ws, pool).await?;
+
+let ws = vec!["MEDICAL", "medical", "medicall", "Medicall", "med.", "Med."];
+replace_list_items_with_target("Medical", &ws, pool).await?;
+
+let ws = vec!["HOSPITAL", "hospital", "hospitall", "hosptal"];
+replace_list_items_with_target("Hospital", &ws, pool).await?;
+
+// hospita at end
+
+replace_in_fac_proc("hospita", "Hospital", "e", true, "", pool).await?; 
+replace_in_fac_proc("Hospita", "Hospital", "e", true, "", pool).await?; 
+
+let ws = vec!["CENTER", "ctr.", "Ctr."];
+replace_list_items_with_target("Center", &ws, pool).await?;
+
+replace_in_fac_proc("Repbulic", "Republic", "r", true, "", pool).await?; 
+replace_in_fac_proc("SUN YAT-SEN", "Sun Yat-sen", "r", true, "", pool).await?; 
+replace_in_fac_proc("L’OUEST", "l’Ouest", "r", true, "", pool).await?; 
+ 
+
 /*
     -- others
 
@@ -856,19 +875,6 @@ pub async fn regularise_word_others(_pool: &Pool<Postgres>) -> Result<(), AppErr
       let ws = vec!["", "", "*", "", "", "", "", "", "", "", "", ""];
 
        let ws = vec!["", "", "*", "", "", "", "", "", "", "", "", ""];
-
-	update ad.locs set fac_proc = replace(fac_proc, 'Repbulic', 'Republic') where fac_proc ~ 'Repbulic'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'recruting', 'recruiting') where fac_proc ~ 'recruting'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'recuiting', 'recruiting') where fac_proc ~ 'recuiting'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'medicall', 'medical') where fac_proc ~ 'medicall'; 
-	update ad.locs set fac_proc = replace(fac_proc, 'Medicall', 'Medical') where fac_proc ~ 'Medicall'; 
-	
-    hospita 
-    hospitall
-    hosptal
-    
-    centre / er
-    
 
 */
         

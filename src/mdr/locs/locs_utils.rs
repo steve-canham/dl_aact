@@ -13,6 +13,7 @@ pub async fn execute_sql(sql: &str, pool: &Pool<Postgres>) -> Result<PgQueryResu
 pub async fn replace_in_fac_proc(s1: &str, s2: &str, sql_where: &str, rb: bool, fb: &str, pool: &Pool<Postgres>) -> Result<(), AppError> {
     
     let sql1 = format!("update ad.locs set fac_proc = replace(fac_proc, '{}', '{}') where ", s1, s2);
+   
     let s = if s1.contains(".") { &s1.replace(".", r"\.") } else { s1 };
     let sql2 = match sql_where {
         "r" => format!(" fac_proc ~ '{}'", s),
@@ -53,26 +54,6 @@ pub async fn replace_in_fac_proc(s1: &str, s2: &str, sql_where: &str, rb: bool, 
     Ok(())
 }
 
-
-/*  
-
-pub async fn replace_like_in_fac_proc(s1: &str, s2: &str, pool: &Pool<Postgres>, with_fb: bool) -> Result<(), AppError> {
-
-    let sql = format!(r#"update ad.locs
-	        set fac_proc = replace(fac_proc, '{}', '{}') where fac_proc like '%{}%' "#, s1, s2, s1); 
-
-    let r = sqlx::raw_sql(&sql).execute(pool)
-           .await.map_err(|e| AppError::SqlxError(e, sql.to_string()))?.rows_affected();
-
-    if with_fb {
-        let action_string: String = if s2 == "" {"removed".to_string()} else {format!("replaced by '{}'", s2)};
-        let recs = if r==1 {"record"} else {"records"};
-        info!("{} {} had '{}'s {}", r, recs, s1, action_string);
-    }
-
-    Ok({})
-}
-*/
 
 pub async fn remove_leading_char_in_fac_proc(s: &str, fb: bool, pool: &Pool<Postgres>) -> Result<(), AppError> {
 
@@ -125,6 +106,36 @@ pub async fn replace_list_items_with_target(target: &str, ws: &[&str], pool: &Po
 
     for w in ws {
         replace_in_fac_proc( w, target, "r", true, "", pool).await?; 
+    }
+
+    Ok({})
+}
+
+
+pub async fn replace_list_items_with_capitalised(ws: &[&str], pool: &Pool<Postgres>) -> Result<(), AppError> {
+
+    // Here the assumption is that the input words are all upper case, and we need to leave only the first character in this state.
+    // Below is from https://stackoverflow.com/questions/38406793/why-is-capitalizing-the-first-letter-of-a-string-so-convoluted-in-rust
+    // Exactly how this is working needs more work!
+    
+    for w in ws {
+        let wlower  = w.to_lowercase();     // initially make it all lower case
+        let mut c = wlower.chars();      // turn word into0 a vector of characters
+        let wcap = match c.next() {
+            None => String::new(),
+            Some(f) => f.to_uppercase().collect::<String>() + c.as_str(),
+        };
+        replace_in_fac_proc( w, &wcap, "r", true, "", pool).await?; 
+    }
+
+    Ok({})
+}
+
+pub async fn replace_list_items_with_lower_case(ws: &[&str], pool: &Pool<Postgres>) -> Result<(), AppError> {
+
+    for w in ws {
+        let wlower = w.to_lowercase();
+        replace_in_fac_proc( w, &wlower, "r", true, "", pool).await?; 
     }
 
     Ok({})
