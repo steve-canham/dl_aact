@@ -136,13 +136,13 @@ fn status_sql <'a>() -> &'a str {
 		when c.overall_status = 'COMPLETED' then 30
 		when c.overall_status = 'NOT_YET_RECRUITING' then 10
 		when c.overall_status = 'WITHDRAWN' then 12
-		when c.overall_status = 'RECRUITING' then 14
+		when c.overall_status = 'RECRUITING' then 15
 		when c.overall_status = 'APPROVED_FOR_MARKETING' then 30
 		when c.overall_status = 'ENROLLING_BY_INVITATION' then 16
-		when c.overall_status = 'ACTIVE_NOT_RECRUITING' then 18
-		when c.overall_status = 'AVAILABLE' then 20
-		when c.overall_status = 'SUSPENDED' then 25
-		when c.overall_status = 'TERMINATED' then 32
+		when c.overall_status = 'ACTIVE_NOT_RECRUITING' then 25
+		when c.overall_status = 'AVAILABLE' then 22
+		when c.overall_status = 'SUSPENDED' then 19
+		when c.overall_status = 'TERMINATED' then 28
 		else 0
 	end
 	from ctgov.studies c
@@ -155,9 +155,9 @@ fn last_known_status_sql <'a>() -> &'a str {
     r#"Update ad.studies s
 	set status_id = case
 		when c.last_known_status = 'NOT_YET_RECRUITING' then 10
-		when c.last_known_status = 'RECRUITING' then 14
+		when c.last_known_status = 'RECRUITING' then 15
 		when c.last_known_status = 'ENROLLING_BY_INVITATION' then 16
-		when c.last_known_status = 'ACTIVE_NOT_RECRUITING' then 18
+		when c.last_known_status = 'ACTIVE_NOT_RECRUITING' then 25
 	end
 	from ctgov.studies c
 	where s.sd_sid = c.nct_id

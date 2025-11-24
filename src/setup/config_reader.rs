@@ -241,7 +241,7 @@ pub struct TomlDataPars {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -257,7 +257,7 @@ pub struct TomlDataPars {
          let config_string = config.to_string();
          let res = populate_config_vars(&config_string).unwrap();
          assert_eq!(res.data_details.data_date, "2025-06-25");
-         assert_eq!(res.folders.log_folder_path, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+         assert_eq!(res.folders.log_folder_path, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
          assert_eq!(res.db_pars.db_host, "localhost");
          assert_eq!(res.db_pars.db_user, "user_name");
          assert_eq!(res.db_pars.db_password, "password");
@@ -277,7 +277,7 @@ pub struct TomlDataPars {
  data_date=""
  
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -289,7 +289,7 @@ pub struct TomlDataPars {
          let config_string = config.to_string();
          let res = populate_config_vars(&config_string).unwrap();
          assert_eq!(res.data_details.data_date, "");
-         assert_eq!(res.folders.log_folder_path, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+         assert_eq!(res.folders.log_folder_path, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
   }
 
 
@@ -322,7 +322,7 @@ pub struct TomlDataPars {
      let config = r#"
      
  [folders]
-  log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+  log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -334,7 +334,7 @@ pub struct TomlDataPars {
          let config_string = config.to_string();
          let res = populate_config_vars(&config_string).unwrap();
          assert_eq!(res.data_details.data_date, "");
-         assert_eq!(res.folders.log_folder_path, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+         assert_eq!(res.folders.log_folder_path, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
     }
  
  
@@ -347,7 +347,7 @@ pub struct TomlDataPars {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -369,7 +369,7 @@ pub struct TomlDataPars {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_user="user_name"
@@ -397,7 +397,7 @@ pub struct TomlDataPars {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"

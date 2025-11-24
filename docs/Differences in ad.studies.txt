@@ -162,18 +162,19 @@ Previously, study status was coded as
 Changes have been made to slightly simplify the categories, and bring the numerical sequence more in line with the natural life cycle of most studies.
 The new coding is 
 
-10  Not yet recruiting               (from 'Not yet recruiting', 'pending' 'without startig enrollment', (sic), 'preinitiation')
-12  Withdrawn                        (from 'Withdrawn')
-14  Recruiting                       (from 'Recruiting', 'open public recruiting', 'open to recruitment', 'in enrollment')
-16  Enrolling by invitation          (from CTG)
-18  Ongoing, no longer recruiting    (from 'Active, not recruiting')
-20  Ongoing, recruitment unclear     (from 'Available', 'ongoing', 'authorised-recruitment may be ongoing or finished')
-25  Suspended                        (from 'suspended', 'temporarily closed', 'temporary halt')
-30  Completed                        (from 'Completed', 'Approved for marketing')
-32  Terminated                       (from 'Terminated', 'stopped early', 'stopped')
-98  Not applicable                   (from 'not applicable')
-99  Other                            (from any not in any other category - normally would require further investigation).
-0   Not provided                     (from null value, 'Withheld', 'No longer available', 'temporarily not available')
+10  Not yet recruiting                      (from 'Not yet recruiting', 'pending' 'without startig enrollment', 'without starting enrollment', 'preinitiation')
+12  Withdrawn                               (from 'Withdrawn')
+15  Recruiting                              (from 'Recruiting', 'open public recruiting', 'open to recruitment', 'in enrollment')
+16  Enrolling by invitation                 (from CTG only)
+19  Suspended                               (from 'suspended', 'temporarily closed', 'temporary halt')
+22  Ongoing, recruitment status unclear     (from 'Available', 'ongoing', 'authorised-recruitment may be ongoing or finished')
+25  Ongoing, no longer recruiting           (from 'Active, not recruiting', 'complete', 'completed', 'complete: follow-up continuing', 'complete: follow up continuing', 'closed to recruitment of participants', 'no longer recruiting', 'not recruiting' , 'ecruitment completed', 'enrollment closed', 'recruiting stopped after recruiting started')
+28  Terminated                              (from 'Terminated', 'stopped early', 'stopped')
+30  Completed                               (from 'Completed'- for CTG and ANZCTR, 'Approved for marketing', 'Complete: follow-up complete', 'Complete: follow up complete', 'Data analysis completed', 'Main results already published')
+98  Not applicable                          (from 'not applicable')
+99  Other                                   (from any not in any other category - normally would require further investigation).
+0   Not provided                            (from null value, 'Withheld', 'unknown', 'No longer available', 'temporarily not available', 'deleted from source registry', 'unknown status', )
+
 
 =======================
 iec_values

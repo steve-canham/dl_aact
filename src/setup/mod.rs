@@ -137,7 +137,7 @@ mod tests {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -160,7 +160,7 @@ mod tests {
         let res = get_params(cli_pars, &config_string).unwrap();
 
         assert_eq!(res.data_date, "2025-06-25");
-        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
         assert_eq!(res.flags.process_mdr_data, true);
         assert_eq!(res.flags.process_iec_data, false);
         assert_eq!(res.flags.code_data, false);
@@ -181,7 +181,7 @@ mod tests {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -204,7 +204,7 @@ mod tests {
         let res = get_params(cli_pars, &config_string).unwrap();
 
         assert_eq!(res.data_date, "2025-03-03");
-        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
         assert_eq!(res.flags.process_mdr_data, true);
         assert_eq!(res.flags.process_iec_data, false);
 
@@ -221,7 +221,7 @@ mod tests {
  data_date=""
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -254,7 +254,7 @@ mod tests {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -277,7 +277,7 @@ mod tests {
         let res = get_params(cli_pars, &config_string).unwrap();
 
         assert_eq!(res.data_date, "2025-08-04");
-        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
         assert_eq!(res.flags.process_mdr_data, true);
         assert_eq!(res.flags.process_iec_data, true);
         assert_eq!(res.flags.code_data, false);
@@ -295,7 +295,7 @@ mod tests {
  data_date="2025-06-25"
 
  [folders]
- log_folder_path="/home/steve/Data/MDR/MDR_Logs/aact/"
+ log_folder_path="/home/steve/Data/MDR logs/aact/"
  
  [database]
  db_host="localhost"
@@ -321,7 +321,7 @@ mod tests {
         let res = get_params(cli_pars, &config_string).unwrap();
 
         assert_eq!(res.data_date, "2025-06-25");
-        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR/MDR_Logs/aact/"));
+        assert_eq!(res.log_folder, PathBuf::from("/home/steve/Data/MDR logs/aact/"));
         assert_eq!(res.flags.process_mdr_data, true);
         assert_eq!(res.flags.process_iec_data, true);
         assert_eq!(res.flags.code_data, true);
