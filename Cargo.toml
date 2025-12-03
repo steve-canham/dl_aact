@@ -2,7 +2,7 @@
 name = "dl_aact"
 version = "0.1.0"
 authors = ["Steve Canham <stevecanham@outlook.com>"]
-edition = "2021"
+edition = "2024"
 
 [lib]
 path = "src/lib.rs"
